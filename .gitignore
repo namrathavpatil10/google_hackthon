@@ -1,0 +1,29 @@
+# Gradle
+.gradle/
+build/
+app/build/
+
+# Local config
+local.properties
+
+# Generated files
+*.apk
+*.aab
+
+# Logs / dumps
+*.log
+*.hprof
+
+# ML models (too large for GitHub)
+*.tflite
+
+# Mac
+.DS_Store
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+
+deepfake_saved_model/
+*.tflite
+*.data
