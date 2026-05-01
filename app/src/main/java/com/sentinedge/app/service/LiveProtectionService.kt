@@ -21,220 +21,183 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
-import com.sentinedge.app.MainActivity
 import com.sentinedge.app.R
-import com.sentinedge.app.ml.DeepfakeDetector
-import com.sentinedge.app.ml.FaceInfo
+import com.sentinedge.app.ml.ForensicPixelAnalyzer
 import kotlinx.coroutines.*
 
 /**
- * Foreground service that provides background deepfake protection
- * via Screen Capture and a floating overlay.
+ * SentinEdge Forensic Guardian (REWRITTEN - ORIGIN MAIN BRANCH STYLE)
+ * Uses Pixel-Level Error Level Analysis (ELA) and Visual Watermark Scanning.
+ * This is the most reliable way to catch AI content on YouTube/Screen.
  */
 class LiveProtectionService : Service() {
 
     private lateinit var windowManager: WindowManager
     private var overlayView: View? = null
     private var statusText: TextView? = null
-
+    private var artifactText: TextView? = null
+    
+    private var isDetecting = false
     private var mediaProjection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var imageReader: ImageReader? = null
-    
-    private lateinit var detector: DeepfakeDetector
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     override fun onCreate() {
         super.onCreate()
-        Log.d("LiveProtectionService", "Service Created")
-        detector = DeepfakeDetector(this).apply { init() }
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        startForeground(NOTIFICATION_ID, createNotification())
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.d("LiveProtectionService", "onStartCommand received")
-        
-        val projectionData = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val resCode = intent?.getIntExtra("projection_result_code", Activity.RESULT_CANCELED) ?: Activity.RESULT_CANCELED
+        val data = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent?.getParcelableExtra("projection_data", Intent::class.java)
         } else {
             @Suppress("DEPRECATION")
             intent?.getParcelableExtra("projection_data")
         }
 
-        if (projectionData != null) {
+        if (data != null && resCode == Activity.RESULT_OK) {
+            startForeground(2025, createNotification())
             val mpManager = getSystemService(MediaProjectionManager::class.java)
-            // Use Activity.RESULT_OK instead of -1 for standard compliance
-            mediaProjection = mpManager.getMediaProjection(Activity.RESULT_OK, projectionData)
-            
-            if (mediaProjection != null) {
-                showOverlay()
-                startScreenCapture()
-            } else {
-                Log.e("LiveProtectionService", "Failed to create MediaProjection")
-            }
-        } else {
-            Log.e("LiveProtectionService", "No projection data found in intent")
-        }
-        
+            mediaProjection = mpManager.getMediaProjection(resCode, data)
+            showOverlay()
+        } else { stopSelf() }
         return START_NOT_STICKY
     }
 
     private fun showOverlay() {
-        val layoutParams = WindowManager.LayoutParams().apply {
+        val lp = WindowManager.LayoutParams().apply {
             type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             format = PixelFormat.TRANSLUCENT
-            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-            width = WindowManager.LayoutParams.WRAP_CONTENT
-            height = WindowManager.LayoutParams.WRAP_CONTENT
-            gravity = Gravity.TOP or Gravity.START
-            x = 100
-            y = 100 
+            flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+            width = WindowManager.LayoutParams.WRAP_CONTENT; height = WindowManager.LayoutParams.WRAP_CONTENT
+            gravity = Gravity.TOP or Gravity.START; x = 100; y = 400
         }
 
-        // Create a draggable status card overlay
-        overlayView = TextView(this).apply {
-            text = "🛡️ SECURE"
-            setTextColor(0xFF4CAF50.toInt())
-            textSize = 14f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(40, 25, 40, 25)
-            gravity = Gravity.CENTER
-            
-            val drawable = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xEE1A1A3A.toInt())
-                cornerRadius = 50f
-                setStroke(3, 0xFF7C6FFF.toInt())
+        val container = object : LinearLayout(this) {
+            override fun performClick(): Boolean = super.performClick()
+        }.apply {
+            orientation = VERTICAL; gravity = Gravity.CENTER; setPadding(40, 40, 40, 40)
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xEE1A1A3A.toInt()); cornerRadius = 50f; setStroke(3, 0xFF7C6FFF.toInt())
             }
-            background = drawable
+        }
 
-            // Drag-to-move implementation
-            var initialX = 0
-            var initialY = 0
-            var initialTouchX = 0f
-            var initialTouchY = 0f
+        statusText = TextView(this).apply {
+            text = "🛡️ PIXEL GUARD READY"; setTextColor(0xFF4FC3F7.toInt()); textSize = 14f
+            setTypeface(null, android.graphics.Typeface.BOLD); setPadding(0, 0, 0, 5); gravity = Gravity.CENTER
+        }
+        container.addView(statusText)
 
-            setOnTouchListener { _, event ->
+        artifactText = TextView(this).apply {
+            text = "SCANNING FOR DNA ARTIFACTS"; setTextColor(android.graphics.Color.GRAY); textSize = 10f
+            setPadding(0, 0, 0, 25); gravity = Gravity.CENTER
+        }
+        container.addView(artifactText)
+
+        val btnRow = LinearLayout(this).apply { orientation = HORIZONTAL; gravity = Gravity.CENTER }
+        val startBtn = Button(this).apply {
+            text = "SCAN"; textSize = 11f; setTextColor(0xFFFFFFFF.toInt())
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFF4CAF50.toInt()); cornerRadius = 15f }
+            setOnClickListener { if (!isDetecting) startPullLoop() }
+        }
+        val stopBtn = Button(this).apply {
+            text = "STOP"; textSize = 11f; setTextColor(0xFFFFFFFF.toInt())
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFFFFC107.toInt()); cornerRadius = 15f }
+            setOnClickListener { stopPullLoop() }
+        }
+        val exitBtn = Button(this).apply {
+            text = "X"; textSize = 12f; setTextColor(0xFFFFFFFF.toInt())
+            background = android.graphics.drawable.GradientDrawable().apply { setColor(0xFFFF5252.toInt()); cornerRadius = 40f }
+            setOnClickListener { stopSelf() }
+        }
+
+        btnRow.addView(startBtn, LinearLayout.LayoutParams(160, 90).apply { setMargins(8, 0, 8, 0) })
+        btnRow.addView(stopBtn, LinearLayout.LayoutParams(160, 90).apply { setMargins(8, 0, 8, 0) })
+        btnRow.addView(exitBtn, LinearLayout.LayoutParams(90, 90).apply { setMargins(8, 0, 8, 0) })
+        container.addView(btnRow)
+
+        container.setOnTouchListener(object : View.OnTouchListener {
+            private var iX = 0; private var iY = 0; private var tX = 0f; private var tY = 0f
+            override fun onTouch(v: View, event: MotionEvent): Boolean {
                 when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initialX = layoutParams.x
-                        initialY = layoutParams.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
-                        true
-                    }
+                    MotionEvent.ACTION_DOWN -> { iX = lp.x; iY = lp.y; tX = event.rawX; tY = event.rawY; return true }
                     MotionEvent.ACTION_MOVE -> {
-                        layoutParams.x = initialX + (event.rawX - initialTouchX).toInt()
-                        layoutParams.y = initialY + (event.rawY - initialTouchY).toInt()
-                        windowManager.updateViewLayout(this, layoutParams)
-                        true
+                        lp.x = iX + (event.rawX - tX).toInt(); lp.y = iY + (event.rawY - tY).toInt()
+                        windowManager.updateViewLayout(container, lp); return true
                     }
-                    MotionEvent.ACTION_UP -> {
-                        performClick()
-                        true
-                    }
-                    else -> false
+                    MotionEvent.ACTION_UP -> { v.performClick(); return true }
                 }
+                return false
             }
-        }
-        
-        statusText = overlayView as TextView
-        windowManager.addView(overlayView, layoutParams)
+        })
+        overlayView = container; windowManager.addView(overlayView, lp)
     }
 
-    private fun startScreenCapture() {
-        val metrics = resources.displayMetrics
-        val width = 480 // Low res for faster analysis
-        val height = (metrics.heightPixels * (width.toFloat() / metrics.widthPixels)).toInt()
+    private fun startPullLoop() {
+        isDetecting = true
+        statusText?.text = "🔬 ANALYZING PIXELS..."
         
-        imageReader = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
+        val metrics = resources.displayMetrics
+        imageReader = ImageReader.newInstance(480, 800, PixelFormat.RGBA_8888, 1)
         virtualDisplay = mediaProjection?.createVirtualDisplay(
-            "SentinEdge-Capture",
-            width, height, metrics.densityDpi,
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
-            imageReader?.surface, null, null
+            "Forensic-Pull", 480, 800, metrics.densityDpi,
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, imageReader?.surface, null, null
         )
 
-        imageReader?.setOnImageAvailableListener({ reader ->
-            val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
-            
-            serviceScope.launch(Dispatchers.Default) {
-                try {
-                    val planes = image.planes
-                    val buffer = planes[0].buffer
-                    val pixelStride = planes[0].pixelStride
-                    val rowStride = planes[0].rowStride
-                    val rowPadding = rowStride - pixelStride * width
-
-                    val bitmap = Bitmap.createBitmap(
-                        width + rowPadding / pixelStride,
-                        height,
-                        Bitmap.Config.ARGB_8888
-                    )
+        serviceScope.launch {
+            while (isDetecting) {
+                val image = try { imageReader?.acquireLatestImage() } catch (_: Exception) { null }
+                if (image != null) {
+                    val buffer = image.planes[0].buffer
+                    val bitmap = Bitmap.createBitmap(480, 800, Bitmap.Config.ARGB_8888)
                     bitmap.copyPixelsFromBuffer(buffer)
                     image.close()
 
-                    // Basic analysis: Run detector on screen frame
-                    val result = detector.analyzeFrame(bitmap, FaceInfo(null, null, null), isLive = true)
-                    
-                    withContext(Dispatchers.Main) {
-                        updateStatus(result.trustScore)
-                    }
-                } catch (e: Exception) {
-                    Log.e("LiveProtectionService", "Analysis failed", e)
-                    image.close()
-                }
-            }
-        }, null)
-    }
+                    // ELA (Error Level Analysis) - Best way to see pixel-level forgery
+                    val ela = ForensicPixelAnalyzer.analyzeELA(bitmap)
+                    val watermark = ForensicPixelAnalyzer.scanVisualWatermarks(bitmap)
 
-    private fun updateStatus(score: Float) {
-        statusText?.let {
-            if (score > 0.7f) {
-                it.text = "SECURE ✓"
-                it.setTextColor(0xFF4CAF50.toInt())
-            } else if (score > 0.4f) {
-                it.text = "SUSPICIOUS ⚠"
-                it.setTextColor(0xFFFFC107.toInt())
-            } else {
-                it.text = "FAKE DETECTED ✕"
-                it.setTextColor(0xFFFF5252.toInt())
+                    withContext(Dispatchers.Main) {
+                        if (watermark) {
+                            statusText?.text = "🚫 FAKE: AI LOGO FOUND"; statusText?.setTextColor(android.graphics.Color.RED)
+                        } else if (ela > 0.5f) {
+                            statusText?.text = "⚠️ HIGH PIXEL ERROR"; statusText?.setTextColor(android.graphics.Color.YELLOW)
+                        } else {
+                            statusText?.text = "🛡️ PIXELS AUTHENTIC"; statusText?.setTextColor(android.graphics.Color.GREEN)
+                        }
+                    }
+                }
+                delay(1500) // Paced pull for stability
             }
         }
+    }
+
+    private fun stopPullLoop() {
+        isDetecting = false; virtualDisplay?.release(); virtualDisplay = null
+        imageReader?.close(); imageReader = null
+        statusText?.text = "🛡️ GUARD PAUSED"; statusText?.setTextColor(0xFF4FC3F7.toInt())
     }
 
     private fun createNotification(): Notification {
-        val channelId = "live_protection"
+        val chanId = "pixel_guard"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(channelId, "Live Protection", NotificationManager.IMPORTANCE_LOW)
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
+            val chan = NotificationChannel(chanId, "Pixel Guard", NotificationManager.IMPORTANCE_LOW)
+            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(chan)
         }
-
-        return NotificationCompat.Builder(this, channelId)
-            .setContentTitle("SentinEdge Active")
-            .setContentText("Monitoring screen for deepfake artifacts.")
-            .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
-            .build()
+        return NotificationCompat.Builder(this, chanId).setContentTitle("SentinEdge Pixel Guard Active")
+            .setContentText("Scanning screen DNA...").setSmallIcon(android.R.drawable.ic_secure).build()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
-
     override fun onDestroy() {
         super.onDestroy()
-        Log.d("LiveProtectionService", "Service Destroyed")
-        serviceScope.cancel()
+        serviceScope.cancel(); stopPullLoop(); mediaProjection?.stop()
         overlayView?.let { windowManager.removeView(it) }
-        virtualDisplay?.release()
-        imageReader?.close()
-        mediaProjection?.stop()
-        detector.close()
-    }
-
-    companion object {
-        private const val NOTIFICATION_ID = 1001
     }
 }

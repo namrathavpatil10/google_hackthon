@@ -13,16 +13,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.*
-import com.sentinedge.app.ml.DetectionResult
 import com.sentinedge.app.service.LiveProtectionService
-import com.sentinedge.app.source.LiveCameraSource
 import com.sentinedge.app.ui.*
 import com.sentinedge.app.ui.theme.SentinEdgeTheme
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
-    private var isBackgroundServiceRunning by mutableStateOf(false)
+    private var isBackgroundRunning by mutableStateOf(false)
 
     private val projectionLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -30,13 +28,14 @@ class MainActivity : ComponentActivity() {
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             val serviceIntent = Intent(this, LiveProtectionService::class.java).apply {
                 putExtra("projection_data", result.data)
+                putExtra("projection_result_code", result.resultCode)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 startForegroundService(serviceIntent)
             } else {
                 startService(serviceIntent)
             }
-            isBackgroundServiceRunning = true
+            isBackgroundRunning = true
         }
     }
 
@@ -44,37 +43,31 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) {}
 
-    private fun toggleBackgroundProtection(active: Boolean) {
+    private fun toggleBackground(active: Boolean) {
         if (active) {
             if (!Settings.canDrawOverlays(this)) {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
+                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
                 startActivity(intent)
                 return
             }
-            
             val mpManager = getSystemService(MediaProjectionManager::class.java)
             projectionLauncher.launch(mpManager.createScreenCaptureIntent())
         } else {
             stopService(Intent(this, LiveProtectionService::class.java))
-            isBackgroundServiceRunning = false
+            isBackgroundRunning = false
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        requestRuntimePermissions()
+        requestPermissions()
 
         setContent {
             SentinEdgeTheme {
                 val state by viewModel.state.collectAsState()
-                val downloadProgress by viewModel.downloadProgress.collectAsState()
-                var cameraSource by remember { mutableStateOf<LiveCameraSource?>(null) }
-
+                
                 when (val s = state) {
-                    is AnalysisState.Idle -> HomeScreen(
+                    is AnalysisState.Idle -> MainScreen(
                         onMediaSelected = { uri -> 
                             val mimeType = contentResolver.getType(uri)
                             if (mimeType?.startsWith("video") == true) {
@@ -83,85 +76,42 @@ class MainActivity : ComponentActivity() {
                                 viewModel.analyzeImage(uri)
                             }
                         },
-                        onLiveCamera = {
-                            cameraSource = viewModel.startLiveCamera()
-                        },
-                        onToggleBackgroundProtection = { toggleBackgroundProtection(it) },
-                        isBackgroundProtectionActive = isBackgroundServiceRunning,
-                        downloadProgress = downloadProgress
+                        onToggleBackground = { toggleBackground(it) },
+                        isBackgroundActive = isBackgroundRunning
                     )
-
-                    is AnalysisState.Loading -> {
-                        val src = cameraSource
-                        if (src != null) {
-                            CameraScreen(state = s, cameraSource = src, onStop = {
-                                cameraSource = null; viewModel.stopAnalysis()
-                            })
-                        } else {
-                            // Unified Loading Screen for Images and Videos
-                            MainScreen(state = s, onMediaSelected = { uri -> 
+                    is AnalysisState.Running -> {
+                        VideoAnalysisScreen(state = s, onStop = { viewModel.stopAnalysis() })
+                    }
+                    is AnalysisState.Finished -> {
+                        ResultScreen(
+                            state = s,
+                            onAnalyzeAnother = { uri -> 
                                 val mimeType = contentResolver.getType(uri)
                                 if (mimeType?.startsWith("video") == true) {
                                     viewModel.analyzeVideo(uri)
                                 } else {
                                     viewModel.analyzeImage(uri)
                                 }
-                            }, onStop = viewModel::stopAnalysis)
-                        }
+                            },
+                            onLiveCamera = { viewModel.startLiveCamera() }
+                        )
                     }
-
-                    is AnalysisState.Running -> {
-                        if (s.sourceType == SourceType.CAMERA) {
-                            val src = cameraSource
-                            if (src != null) {
-                                CameraScreen(state = s, cameraSource = src, onStop = {
-                                    cameraSource = null; viewModel.stopAnalysis()
-                                })
-                            }
-                        } else {
-                            VideoAnalysisScreen(state = s, onStop = viewModel::stopAnalysis)
-                        }
-                    }
-
-                    is AnalysisState.Finished -> {
-                        // REMOVED ResultScreen usage. Handling finished state within MainScreen or same screen.
-                        MainScreen(state = s, onMediaSelected = { uri -> 
-                            val mimeType = contentResolver.getType(uri)
-                            if (mimeType?.startsWith("video") == true) {
-                                viewModel.analyzeVideo(uri)
-                            } else {
-                                viewModel.analyzeImage(uri)
-                            }
-                        }, onStop = viewModel::stopAnalysis)
-                    }
-
-                    is AnalysisState.Error -> MainScreen(
-                        state = s,
-                        onMediaSelected = { uri -> 
-                            val mimeType = contentResolver.getType(uri)
-                            if (mimeType?.startsWith("video") == true) {
-                                viewModel.analyzeVideo(uri)
-                            } else {
-                                viewModel.analyzeImage(uri)
-                            }
-                        },
-                        onStop = viewModel::stopAnalysis
+                    else -> MainScreen(
+                        onMediaSelected = { viewModel.analyzeImage(it) },
+                        onToggleBackground = { toggleBackground(it) },
+                        isBackgroundActive = isBackgroundRunning
                     )
                 }
             }
         }
     }
 
-    private fun requestRuntimePermissions() {
-        val perms = buildList {
-            add(Manifest.permission.CAMERA)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                add(Manifest.permission.READ_MEDIA_IMAGES)
-                add(Manifest.permission.READ_MEDIA_VIDEO)
-            } else {
-                add(Manifest.permission.READ_EXTERNAL_STORAGE)
-            }
+    private fun requestPermissions() {
+        val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            arrayOf(Manifest.permission.CAMERA, Manifest.permission.READ_MEDIA_IMAGES, Manifest.permission.READ_MEDIA_VIDEO)
+        } else {
+            arrayOf(Manifest.permission.CAMERA, Manifest.permission.READ_EXTERNAL_STORAGE)
         }
-        permissionLauncher.launch(perms.toTypedArray())
+        permissionLauncher.launch(perms)
     }
 }
