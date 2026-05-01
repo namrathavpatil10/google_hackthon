@@ -2,6 +2,7 @@ package com.sentinedge.app.source
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import kotlinx.coroutines.Dispatchers
@@ -39,16 +40,29 @@ class DebugFileSource(
             ?.toInt()
             ?: 30
 
+        val rotation = retriever
+            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)
+            ?.toIntOrNull() ?: 0
+
         val frameStepUs = (1_000_000L / videoFrameRate) * sampleEveryNthFrame
         var timeUs = 0L
 
         while (!released && timeUs < durationUs) {
-            val frame = retriever.getFrameAtTime(
+            // OPTIMIZATION: Using OPTION_CLOSEST for better precision in forensic analysis
+            // though sync frames are faster, deepfake artifacts can be missed between them.
+            val rawFrame = retriever.getFrameAtTime(
                 timeUs,
-                MediaMetadataRetriever.OPTION_CLOSEST_SYNC
+                MediaMetadataRetriever.OPTION_CLOSEST
             )
-            if (frame != null) {
-                emit(frame)
+            if (rawFrame != null) {
+                // Apply rotation if needed
+                val finalFrame = if (rotation != 0) {
+                    val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+                    Bitmap.createBitmap(rawFrame, 0, 0, rawFrame.width, rawFrame.height, matrix, true)
+                } else {
+                    rawFrame
+                }
+                emit(finalFrame)
             }
             timeUs += frameStepUs
             delay(targetFrameDelayMs)

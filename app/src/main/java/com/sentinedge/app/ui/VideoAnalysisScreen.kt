@@ -5,7 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sentinedge.app.AnalysisState
+import com.sentinedge.app.SourceType
 import com.sentinedge.app.Verdict
 import com.sentinedge.app.toVerdict
 
@@ -47,7 +48,7 @@ fun VideoAnalysisScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 IconButton(onClick = onStop) {
-                    Icon(Icons.Filled.ArrowBack, contentDescription = "Stop", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Stop", tint = Color.White)
                 }
                 Spacer(Modifier.width(4.dp))
                 Column {
@@ -64,7 +65,7 @@ fun VideoAnalysisScreen(
 
             Spacer(Modifier.height(28.dp))
 
-            // Trust ring
+            // Trust ring - Always visible
             TrustScoreRing(
                 trustScore = state.latestResult.trustScore,
                 verdict = verdict,
@@ -74,12 +75,23 @@ fun VideoAnalysisScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // Detection confidence bar
-            DetectionBar(
-                trustScore = state.latestResult.trustScore,
-                verdict = verdict,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            // Detection confidence bar - Always visible
+            val realPercent = (state.latestResult.trustScore * 100).toInt()
+            
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "$realPercent% REALNESS",
+                    color = if (state.latestResult.trustScore > 0.5f) Color(0xFF4CAF50) else Color(0xFFFF5252),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                DetectionBar(
+                    trustScore = state.latestResult.trustScore,
+                    verdict = verdict,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             Spacer(Modifier.height(24.dp))
 
@@ -92,26 +104,31 @@ fun VideoAnalysisScreen(
                     .background(Color(0xFF1A1A3A)),
             ) {
                 StatItem("Frames analyzed", "${state.framesAnalyzed}", Color.White)
-                Divider(color = Color.White.copy(alpha = 0.06f), modifier = Modifier.padding(horizontal = 20.dp))
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f), modifier = Modifier.padding(horizontal = 20.dp))
                 StatItem(
                     "Trust score",
                     "%.1f%%".format(state.latestResult.trustScore * 100),
                     verdictColor(verdict),
                 )
-                Divider(color = Color.White.copy(alpha = 0.06f), modifier = Modifier.padding(horizontal = 20.dp))
-                StatItem(
-                    "Artifact score",
-                    "%.3f".format(state.latestResult.artifactScore),
-                    if (state.latestResult.artifactScore > 0.5f) Color(0xFFFF5252) else Color.White,
-                )
-                state.blinkRate?.let { rate ->
-                    Divider(color = Color.White.copy(alpha = 0.06f), modifier = Modifier.padding(horizontal = 20.dp))
-                    val (label, warn) = when {
-                        rate < 10f  -> "%.0f/min · abnormally low ⚠".format(rate) to true
-                        rate > 30f  -> "%.0f/min · unusually high ⚠".format(rate) to true
-                        else        -> "%.0f/min · normal ✓".format(rate) to false
+                HorizontalDivider(color = Color.White.copy(alpha = 0.06f), modifier = Modifier.padding(horizontal = 20.dp))
+                
+                if (state.sourceType != SourceType.IMAGE) {
+                    StatItem(
+                        "Natural responses",
+                        state.latestResult.mouthMovementScore?.let { "%.2f".format(it) } ?: "Scanning...",
+                        if ((state.latestResult.mouthMovementScore ?: 1f) < 0.3f) Color(0xFFFF5252) else Color.White,
+                    )
+                    state.blinkRate?.let { rate ->
+                        HorizontalDivider(color = Color.White.copy(alpha = 0.06f), modifier = Modifier.padding(horizontal = 20.dp))
+                        val (label, warn) = when {
+                            rate < 5f   -> "%.0f/min · abnormally low ⚠".format(rate) to true
+                            rate > 30f  -> "%.0f/min · unusually high ⚠".format(rate) to true
+                            else        -> "%.0f/min · normal ✓".format(rate) to false
+                        }
+                        StatItem("Blink rate", label, if (warn) Color(0xFFFFC107) else Color(0xFF4CAF50))
                     }
-                    StatItem("Blink rate", label, if (warn) Color(0xFFFFC107) else Color(0xFF4CAF50))
+                } else {
+                    StatItem("Analysis Mode", "Static Image (Full Scan)", Color.White.copy(alpha = 0.6f))
                 }
             }
 
@@ -122,9 +139,7 @@ fun VideoAnalysisScreen(
                 onClick = onStop,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = Brush.horizontalGradient(listOf(Color(0xFF7C6FFF), Color(0xFF4FC3F7)))
-                ),
+                border = ButtonDefaults.outlinedButtonBorder,
                 modifier = Modifier.fillMaxWidth().height(50.dp),
             ) {
                 Text("Stop Analysis", fontWeight = FontWeight.SemiBold)
@@ -136,37 +151,35 @@ fun VideoAnalysisScreen(
 }
 
 @Composable
-private fun StatItem(label: String, value: String, valueColor: Color) {
+fun StatItem(label: String, value: String, valueColor: Color) {
     Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 14.dp),
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label, color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
-        Text(value, color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+        Text(value, color = valueColor, fontWeight = FontWeight.Bold, fontSize = 14.sp)
     }
 }
 
 @Composable
-private fun PulsingDot() {
-    val transition = rememberInfiniteTransition(label = "pulse")
-    val alpha by transition.animateFloat(
-        initialValue = 0.3f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(800), RepeatMode.Reverse),
-        label = "alpha",
+fun PulsingDot() {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulsing")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alpha"
     )
     Box(
         modifier = Modifier
             .size(6.dp)
-            .clip(RoundedCornerShape(50.dp))
-            .background(Color(0xFF7C6FFF).copy(alpha = alpha)),
+            .clip(RoundedCornerShape(3.dp))
+            .background(Color(0xFF7C6FFF).copy(alpha = alpha))
     )
-}
-
-fun verdictColor(verdict: Verdict) = when (verdict) {
-    Verdict.REAL       -> Color(0xFF4CAF50)
-    Verdict.SUSPICIOUS -> Color(0xFFFFC107)
-    Verdict.DEEPFAKE   -> Color(0xFFFF5252)
 }

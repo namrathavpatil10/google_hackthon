@@ -13,9 +13,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.VideoFile
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -30,21 +30,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 private val Purple  = Color(0xFF7C6FFF)
-private val Blue    = Color(0xFF4FC3F7)
-private val Red     = Color(0xFFFF5252)
 private val Dark1   = Color(0xFF0A0A1A)
 private val Dark2   = Color(0xFF13132A)
 private val Dark3   = Color(0xFF1A1A3A)
 
 @Composable
 fun HomeScreen(
-    onVideoSelected: (Uri) -> Unit,
+    onMediaSelected: (Uri) -> Unit,
     onLiveCamera: () -> Unit,
-    onProtectLiveCalls: () -> Unit,
+    onToggleBackgroundProtection: (Boolean) -> Unit,
+    isBackgroundProtectionActive: Boolean = false,
+    downloadProgress: Int? = null,
 ) {
-    val videoPicker = rememberLauncherForActivityResult(
+    val mediaPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
-    ) { uri: Uri? -> uri?.let { onVideoSelected(it) } }
+    ) { uri: Uri? -> uri?.let { onMediaSelected(it) } }
 
     Box(
         modifier = Modifier
@@ -59,8 +59,8 @@ fun HomeScreen(
                 .padding(horizontal = 28.dp),
         ) {
             Spacer(Modifier.height(64.dp))
-
-            // Logo
+            
+            // ... (Logo and Title text remains same)
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -77,7 +77,7 @@ fun HomeScreen(
             Text("SentinEdge", fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
             Spacer(Modifier.height(6.dp))
             Text(
-                "AI-powered deepfake detection",
+                "Multi-modal Deepfake Detection",
                 fontSize = 14.sp,
                 color = Color.White.copy(alpha = 0.5f),
                 textAlign = TextAlign.Center,
@@ -85,8 +85,43 @@ fun HomeScreen(
 
             Spacer(Modifier.height(48.dp))
 
+            // Download Progress (New)
+            if (downloadProgress != null) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .padding(20.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("AI Reasoning Model", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("$downloadProgress%", color = Purple, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    LinearProgressIndicator(
+                        progress = { downloadProgress / 100f },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                        color = Purple,
+                        trackColor = Color.White.copy(alpha = 0.1f)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Downloading 2.8GB model for smart analysis...",
+                        fontSize = 11.sp,
+                        color = Color.White.copy(alpha = 0.4f)
+                    )
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+
             Text(
-                "CHOOSE MODE",
+                "SELECT PROTECTION MODE",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White.copy(alpha = 0.35f),
@@ -95,36 +130,38 @@ fun HomeScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            // Mode 1: Video upload
+            // Mode 1: Media Upload (Image or Video)
             ModeCard(
-                icon = Icons.Filled.VideoFile,
-                title = "Analyze Video",
-                subtitle = "Upload an MP4 and scan every frame for deepfake artifacts",
+                icon = Icons.Filled.FileUpload,
+                title = "Upload Image/Video",
+                subtitle = "Analyze static images or uploaded video files for deepfake artifacts.",
                 gradient = Brush.linearGradient(listOf(Color(0xFF3D2FA0), Color(0xFF6C63FF))),
-                onClick = { videoPicker.launch("video/*") },
+                onClick = { mediaPicker.launch("*/*") },
             )
 
             Spacer(Modifier.height(14.dp))
 
-            // Mode 2: Live camera
+            // Mode 2: Video Call / Live Camera
             ModeCard(
                 icon = Icons.Filled.CameraAlt,
-                title = "Live Camera",
-                subtitle = "Real-time analysis on your front camera — instant verdict",
+                title = "Video Call Protection",
+                subtitle = "Real-time liveness check: Analyzes blinking and natural lip movements.",
                 gradient = Brush.linearGradient(listOf(Color(0xFF0D3B5E), Color(0xFF0277BD))),
                 onClick = onLiveCamera,
             )
 
             Spacer(Modifier.height(14.dp))
 
-            // Mode 3: Protect live calls (MediaProjection overlay)
+            // Mode 3: NEW Background Protection
             ModeCard(
-                icon = Icons.Filled.Visibility,
-                title = "Protect Live Calls",
-                subtitle = "Monitors WhatsApp, Meet & Zoom. Floating overlay appears on top of your call.",
-                gradient = Brush.linearGradient(listOf(Color(0xFF7F0000), Color(0xFFD32F2F))),
-                badge = "NEW",
-                onClick = onProtectLiveCalls,
+                icon = Icons.Filled.Shield,
+                title = "Background Protection",
+                subtitle = "Run SentinEdge in the background while using Zoom or WhatsApp.",
+                gradient = if (isBackgroundProtectionActive) 
+                    Brush.linearGradient(listOf(Color(0xFF1B5E20), Color(0xFF4CAF50))) 
+                    else Brush.linearGradient(listOf(Color(0xFF424242), Color(0xFF212121))),
+                onClick = { onToggleBackgroundProtection(!isBackgroundProtectionActive) },
+                badge = if (isBackgroundProtectionActive) "ACTIVE" else "START"
             )
 
             Spacer(Modifier.height(36.dp))
@@ -134,9 +171,9 @@ fun HomeScreen(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 modifier = Modifier.padding(bottom = 36.dp),
             ) {
-                FooterBadge("On-device")
-                FooterBadge("Private")
-                FooterBadge("Real-time")
+                FooterBadge("Qualcomm NPU")
+                FooterBadge("Liveness Check")
+                FooterBadge("Metadata Analysis")
             }
         }
     }

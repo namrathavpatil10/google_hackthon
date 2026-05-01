@@ -1,22 +1,26 @@
 package com.sentinedge.app
 
 import android.app.Application
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.sentinedge.app.ml.BlinkTracker
 import com.sentinedge.app.ml.DeepfakeDetector
 import com.sentinedge.app.ml.DetectionResult
+import com.sentinedge.app.ml.ModelDownloader
 import com.sentinedge.app.source.DebugFileSource
 import com.sentinedge.app.source.FrameSource
 import com.sentinedge.app.source.LiveCameraSource
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-enum class SourceType { VIDEO, CAMERA }
+enum class SourceType { IMAGE, VIDEO, CAMERA }
 
 sealed interface AnalysisState {
     data object Idle : AnalysisState
@@ -26,21 +30,23 @@ sealed interface AnalysisState {
         val framesAnalyzed: Int,
         val blinkRate: Float?,
         val sourceType: SourceType = SourceType.VIDEO,
+        val isFaceDetected: Boolean = true
     ) : AnalysisState
     data class Finished(
         val finalScore: Float,
         val framesAnalyzed: Int,
         val verdict: Verdict,
+        val result: DetectionResult? = null,
+        val accelerator: String = "CPU"
     ) : AnalysisState
     data class Error(val message: String) : AnalysisState
 }
 
 enum class Verdict { REAL, SUSPICIOUS, DEEPFAKE }
 
-fun Float.toVerdict(confidence: Float = 1f) = when {
-    confidence < 0.4f -> Verdict.SUSPICIOUS // Unsure model = suspicious
-    this >= 0.82f -> Verdict.REAL           // Be strict for "Real"
-    this >= 0.40f -> Verdict.SUSPICIOUS
+fun Float.toVerdict() = when {
+    this >= 0.70f -> Verdict.REAL
+    this >= 0.35f -> Verdict.SUSPICIOUS
     else -> Verdict.DEEPFAKE
 }
 
@@ -48,12 +54,96 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private val detector = DeepfakeDetector(app).also { it.init() }
     private val blinkTracker = BlinkTracker()
+    private val modelDownloader = ModelDownloader(app)
 
     private val _state = MutableStateFlow<AnalysisState>(AnalysisState.Idle)
     val state: StateFlow<AnalysisState> = _state.asStateFlow()
 
+    private val _downloadProgress = MutableStateFlow<Int?>(null)
+    val downloadProgress: StateFlow<Int?> = _downloadProgress.asStateFlow()
+
+    init {
+        if (!modelDownloader.isModelAvailable()) {
+            val id = modelDownloader.startDownload()
+            if (id != -1L) {
+                viewModelScope.launch {
+                    modelDownloader.getDownloadProgress(id).collect { progress ->
+                        _downloadProgress.value = progress
+                        if (progress == 100) {
+                            detector.init() // Re-init to pick up Gemma
+                            _downloadProgress.value = null
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var activeSource: FrameSource? = null
     private var analysisJob: Job? = null
+
+    /**
+     * Optimized logic for static image analysis with OOM protection and artificial delay for UX.
+     */
+    fun analyzeImage(uri: Uri) {
+        stopAnalysis()
+        detector.clearBuffer()
+        _state.value = AnalysisState.Loading
+        
+        viewModelScope.launch {
+            try {
+                // Add a small artificial delay so the UI doesn't flicker too fast
+                delay(800)
+
+                val contentResolver = getApplication<Application>().contentResolver
+                
+                // 1. Get dimensions first without loading into memory
+                val options = BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                contentResolver.openInputStream(uri)?.use { 
+                    BitmapFactory.decodeStream(it, null, options) 
+                }
+
+                // 2. Calculate optimal scaling to prevent OOM (Target ~1000px)
+                val targetSize = 1000
+                var inSampleSize = 1
+                if (options.outHeight > targetSize || options.outWidth > targetSize) {
+                    val halfHeight = options.outHeight / 2
+                    val halfWidth = options.outWidth / 2
+                    while (halfHeight / inSampleSize >= targetSize && halfWidth / inSampleSize >= targetSize) {
+                        inSampleSize *= 2
+                    }
+                }
+
+                // 3. Load the downsampled bitmap
+                val decodeOptions = BitmapFactory.Options().apply {
+                    this.inSampleSize = inSampleSize
+                }
+                val bitmap = contentResolver.openInputStream(uri)?.use { 
+                    BitmapFactory.decodeStream(it, null, decodeOptions) 
+                }
+                
+                if (bitmap == null) {
+                    _state.value = AnalysisState.Error("Could not load image")
+                    return@launch
+                }
+
+                val result = detector.analyzeImage(uri, bitmap)
+                
+                _state.value = AnalysisState.Finished(
+                    finalScore = result.trustScore,
+                    framesAnalyzed = 1,
+                    verdict = result.trustScore.toVerdict(),
+                    result = result,
+                    accelerator = result.acceleratorUsed
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Analysis failed", e)
+                _state.value = AnalysisState.Error(e.message ?: "Analysis failed")
+            }
+        }
+    }
 
     fun analyzeVideo(uri: Uri) {
         stopAnalysis()
@@ -69,75 +159,59 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun startAnalysis(source: FrameSource, sourceType: SourceType) {
         activeSource = source
+        detector.clearBuffer()
         _state.value = AnalysisState.Loading
 
         var framesAnalyzed = 0
-        val scoreBuffer = ArrayDeque<Float>()
+        var totalScoreSum = 0f
+        var lastResult: DetectionResult? = null
+        var bestResult: DetectionResult? = null
 
         analysisJob = viewModelScope.launch {
             try {
                 source.frames().collect { frame ->
                     val faceInfo = blinkTracker.addFrame(frame)
-                    val result = detector.analyze(frame, faceInfo.boundingBox)
+                    val result = detector.analyzeFrame(frame, faceInfo, isLive = sourceType == SourceType.CAMERA)
+                    
+                    // Dynamically update sampling interval based on suspicion level
+                    if (source is LiveCameraSource) {
+                        source.samplingInterval = detector.currentSamplingRate
+                    }
+
+                    lastResult = result
                     framesAnalyzed++
-
-                    // Combine model score (70%) + blink signal (30%)
-                    val combinedScore = combineSignals(result.trustScore, faceInfo.blinkRate)
-                    val combined = result.copy(trustScore = combinedScore, blinkRate = faceInfo.blinkRate)
-
-                    scoreBuffer.addLast(combinedScore)
-                    if (scoreBuffer.size > 30) scoreBuffer.removeFirst()
+                    totalScoreSum += result.trustScore
+                    
+                    // Keep track of the most "significant" result to show at the end
+                    if (bestResult == null || 
+                        (result.trustScore < 0.3f && (bestResult?.trustScore ?: 1.0f) > 0.3f) ||
+                        (result.trustScore > 0.8f && (bestResult?.trustScore ?: 0f) < 0.8f)) {
+                        bestResult = result
+                    }
 
                     _state.value = AnalysisState.Running(
-                        latestResult = combined,
+                        latestResult = result,
                         framesAnalyzed = framesAnalyzed,
                         blinkRate = faceInfo.blinkRate,
                         sourceType = sourceType,
+                        isFaceDetected = faceInfo.boundingBox != null
                     )
                 }
-                // Flow completed — only for video; camera runs until stopped
+                
                 if (sourceType == SourceType.VIDEO) {
-                    val avgScore = if (scoreBuffer.isEmpty()) 0f else scoreBuffer.average().toFloat()
+                    val avgScore = if (framesAnalyzed == 0) 0f else totalScoreSum / framesAnalyzed
                     _state.value = AnalysisState.Finished(
                         finalScore = avgScore,
                         framesAnalyzed = framesAnalyzed,
-                        verdict = avgScore.toVerdict(1f),
+                        verdict = avgScore.toVerdict(),
+                        result = bestResult ?: lastResult,
+                        accelerator = bestResult?.acceleratorUsed ?: lastResult?.acceleratorUsed ?: "CPU"
                     )
                 }
             } catch (e: Exception) {
-                _state.value = AnalysisState.Error(e.message ?: "Unknown error")
+                _state.value = AnalysisState.Error(e.message ?: "Analysis failed")
             }
         }
-    }
-
-    /**
-     * Combines the model's trust score with the blink-rate heuristic.
-     *
-     * Model score  = 70% weight (primary AI signal)
-     * Blink signal = 30% weight (secondary human-behaviour signal)
-     *
-     * Blink penalty:
-     *   < 10/min  → strong fake signal (deepfakes rarely blink) → blinkScore = 0.1
-     *   10–25/min → normal human range                          → blinkScore = 1.0
-     *   25–35/min → slightly elevated, mild suspicion           → blinkScore = 0.6
-     *   > 35/min  → abnormally high, suspicious                 → blinkScore = 0.3
-     *   null      → not enough data yet, no penalty applied
-     */
-    private fun combineSignals(modelScore: Float, blinkRate: Float?): Float {
-        // If the model is weak, it might fluctuate. 
-        // We smooth it and apply a very conservative blink penalty.
-        val baseScore = modelScore.coerceIn(0f, 1f)
-        
-        if (blinkRate == null) return baseScore
-
-        val blinkPenalty = when {
-            blinkRate < 4f   -> 0.80f  // Reduced penalty for weak models
-            blinkRate < 8f   -> 0.92f
-            blinkRate <= 30f -> 1.0f
-            else             -> 0.90f
-        }
-
-        return (baseScore * blinkPenalty).coerceIn(0f, 1f)
     }
 
     fun stopAnalysis() {

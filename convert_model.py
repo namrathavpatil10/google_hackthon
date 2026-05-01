@@ -16,52 +16,62 @@ import numpy as np
 import tensorflow as tf
 import os
 
-MODEL_ID = "dima806/deepfake_vs_real_image_detection"
-OUTPUT   = "deepfake_detector.tflite"
+MODEL_ID_V1 = "dima806/deepfake_vs_real_image_detection"
+MODEL_ID_V2 = "prithivMLmods/Deep-fake-detector-v2-model"
+OUTPUT_V1   = "deepfake_detector_v1.tflite"
+OUTPUT_V2   = "deepfake_detector_v2.tflite"
 
-def convert():
-    print("Step 1 — Loading model directly as TensorFlow (no ONNX)…")
+def convert_v1():
+    print(f"--- Converting V1: {MODEL_ID_V1} ---")
     from transformers import AutoFeatureExtractor, TFAutoModelForImageClassification
 
-    extractor = AutoFeatureExtractor.from_pretrained(MODEL_ID)
-    tf_model  = TFAutoModelForImageClassification.from_pretrained(MODEL_ID, from_pt=True)
+    extractor = AutoFeatureExtractor.from_pretrained(MODEL_ID_V1)
+    tf_model  = TFAutoModelForImageClassification.from_pretrained(MODEL_ID_V1, from_pt=True)
     tf_model.trainable = False
 
-    labels = tf_model.config.id2label
-    print(f"  Label map: {labels}")
-    # Find which index = REAL
-    real_idx = next((k for k, v in labels.items() if "real" in v.lower()), 1)
-    print(f"  REAL index → {real_idx}  (trustScore = output[0][{real_idx}])")
-
-    print("\nStep 2 — Saving as TF SavedModel…")
-    # Wrap in a concrete function with fixed input shape
     @tf.function(input_signature=[tf.TensorSpec(shape=[1, 224, 224, 3], dtype=tf.float32, name="pixel_values")])
     def serving(pixel_values):
-        # HuggingFace ViT expects channel-first; permute
         x = tf.transpose(pixel_values, perm=[0, 3, 1, 2])
         out = tf_model(pixel_values=x, training=False)
         return {"logits": out.logits}
 
-    tf.saved_model.save(tf_model, "deepfake_saved_model",
-                        signatures={"serving_default": serving})
+    tf.saved_model.save(tf_model, "v1_saved_model", signatures={"serving_default": serving})
 
-    print("\nStep 3 — Converting SavedModel → TFLite (float32, no quantisation for accuracy)…")
-    converter = tf.lite.TFLiteConverter.from_saved_model("deepfake_saved_model")
+    converter = tf.lite.TFLiteConverter.from_saved_model("v1_saved_model")
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.target_spec.supported_types = [tf.float32]
-
     tflite_bytes = converter.convert()
-    with open(OUTPUT, "wb") as f:
+    with open(OUTPUT_V1, "wb") as f:
         f.write(tflite_bytes)
+    print(f"✅ V1 Done: {OUTPUT_V1}")
 
-    mb = os.path.getsize(OUTPUT) / 1_000_000
-    print(f"\n✅  Done!  {OUTPUT}  ({mb:.1f} MB)")
-    print(f"\n   Label map: {labels}")
-    print(f"   REAL probability → output[0][{real_idx}]")
-    print(f"\n   Next step:")
-    print(f"   cp {OUTPUT} app/src/main/assets/deepfake_detector.tflite")
-    print(f"\n   Then open DeepfakeDetector.kt and set:")
-    print(f"   val realProb = output[0][{real_idx}]")
+def convert_v2():
+    print(f"--- Converting V2: {MODEL_ID_V2} ---")
+    from transformers import AutoImageProcessor, TFAutoModelForImageClassification
+
+    # V2 is often also a ViT or similar high-accuracy model
+    processor = AutoImageProcessor.from_pretrained(MODEL_ID_V2)
+    tf_model  = TFAutoModelForImageClassification.from_pretrained(MODEL_ID_V2, from_pt=True)
+    tf_model.trainable = False
+
+    @tf.function(input_signature=[tf.TensorSpec(shape=[1, 224, 224, 3], dtype=tf.float32, name="pixel_values")])
+    def serving(pixel_values):
+        # Normalize/Transpose logic specific to V2 might be needed,
+        # but usually HuggingFace TF models follow this pattern.
+        x = tf.transpose(pixel_values, perm=[0, 3, 1, 2])
+        out = tf_model(pixel_values=x, training=False)
+        return {"logits": out.logits}
+
+    tf.saved_model.save(tf_model, "v2_saved_model", signatures={"serving_default": serving})
+
+    converter = tf.lite.TFLiteConverter.from_saved_model("v2_saved_model")
+    converter.optimizations = [tf.lite.Optimize.DEFAULT]
+    converter.target_spec.supported_types = [tf.float32]
+    tflite_bytes = converter.convert()
+    with open(OUTPUT_V2, "wb") as f:
+        f.write(tflite_bytes)
+    print(f"✅ V2 Done: {OUTPUT_V2}")
 
 if __name__ == "__main__":
-    convert()
+    convert_v1()
+    convert_v2()

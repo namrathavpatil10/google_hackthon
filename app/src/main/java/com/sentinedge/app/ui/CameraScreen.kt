@@ -12,8 +12,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.sentinedge.app.AnalysisState
+import com.sentinedge.app.SourceType
 import com.sentinedge.app.Verdict
 import com.sentinedge.app.source.LiveCameraSource
 import com.sentinedge.app.toVerdict
@@ -43,6 +47,8 @@ fun CameraScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+    
+    var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_FRONT_CAMERA) }
 
     val verdict = if (state is AnalysisState.Running) state.latestResult.trustScore.toVerdict()
                   else Verdict.REAL
@@ -54,24 +60,26 @@ fun CameraScreen(
         // ── Camera preview ──────────────────────────────────────────────
         AndroidView(
             factory = { ctx ->
-                PreviewView(ctx).also { pv ->
-                    ProcessCameraProvider.getInstance(ctx).addListener({
-                        try {
-                            val provider = ProcessCameraProvider.getInstance(ctx).get()
-                            val preview = Preview.Builder().build()
-                                .also { it.setSurfaceProvider(pv.surfaceProvider) }
-                            val analysis = ImageAnalysis.Builder()
-                                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                .build().also { it.setAnalyzer(analysisExecutor, cameraSource) }
-                            provider.unbindAll()
-                            provider.bindToLifecycle(
-                                lifecycleOwner,
-                                CameraSelector.DEFAULT_FRONT_CAMERA,
-                                preview, analysis,
-                            )
-                        } catch (e: Exception) { Log.e("CameraScreen", "bind failed", e) }
-                    }, ContextCompat.getMainExecutor(ctx))
-                }
+                PreviewView(ctx)
+            },
+            update = { pv ->
+                ProcessCameraProvider.getInstance(context).addListener({
+                    try {
+                        val provider = ProcessCameraProvider.getInstance(context).get()
+                        val preview = Preview.Builder().build()
+                            .also { it.setSurfaceProvider(pv.surfaceProvider) }
+                        val analysis = ImageAnalysis.Builder()
+                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                            .build().also { it.setAnalyzer(analysisExecutor, cameraSource) }
+                        
+                        provider.unbindAll()
+                        provider.bindToLifecycle(
+                            lifecycleOwner,
+                            cameraSelector,
+                            preview, analysis,
+                        )
+                    } catch (e: Exception) { Log.e("CameraScreen", "bind failed", e) }
+                }, ContextCompat.getMainExecutor(context))
             },
             modifier = Modifier.fillMaxSize(),
         )
@@ -115,33 +123,125 @@ fun CameraScreen(
                 Text("LIVE", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, letterSpacing = 2.sp)
             }
             Text("SentinEdge", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-            IconButton(onClick = onStop) {
-                Icon(Icons.Filled.Close, contentDescription = "Stop", tint = Color.White)
+            Row {
+                IconButton(onClick = {
+                    cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+                        CameraSelector.DEFAULT_BACK_CAMERA
+                    } else {
+                        CameraSelector.DEFAULT_FRONT_CAMERA
+                    }
+                }) {
+                    Icon(Icons.Filled.Cameraswitch, contentDescription = "Switch Camera", tint = Color.White)
+                }
+                IconButton(onClick = onStop) {
+                    Icon(Icons.Filled.Close, contentDescription = "Stop", tint = Color.White)
+                }
             }
         }
 
         // ── DEEPFAKE alert banner ────────────────────────────────────────
-        if (state is AnalysisState.Running && verdict == Verdict.DEEPFAKE) {
+        if (state is AnalysisState.Running) {
+            val result = state.latestResult
+            
+            if (verdict == Verdict.DEEPFAKE) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .align(Alignment.TopCenter)
+                        .padding(top = 88.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.horizontalGradient(listOf(Color(0xFF7F0000), Color(0xFFD32F2F), Color(0xFF7F0000)))
+                        ),
+                ) {
+                    Text(
+                        "⚠   DEEPFAKE DETECTED",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color.White,
+                        letterSpacing = 2.sp,
+                        modifier = Modifier.padding(vertical = 10.dp),
+                    )
+                }
+            } else if (result.watermarkFound) {
+                // INNOVATION: AI Signature Detection
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .align(Alignment.TopCenter)
+                        .padding(top = 88.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFFC107).copy(alpha = 0.9f)),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(vertical = 10.dp)
+                    ) {
+                        Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                        Text(
+                            "AI WATERMARK DETECTED",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black,
+                            letterSpacing = 1.sp,
+                        )
+                    }
+                }
+            } else if (!state.isFaceDetected) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp)
+                        .align(Alignment.TopCenter)
+                        .padding(top = 88.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFF5252).copy(alpha = 0.9f)),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(vertical = 10.dp)
+                    ) {
+                        Icon(Icons.Filled.WarningAmber, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Text(
+                            "NO FACE DETECTED",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            letterSpacing = 1.sp,
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── Winning "Verified" Watermark ─────────────────────────────────
+        if (state is AnalysisState.Running && state.latestResult.isVerified) {
             Box(
-                contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
-                    .align(Alignment.TopCenter)
-                    .padding(top = 88.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(
-                        Brush.horizontalGradient(listOf(Color(0xFF7F0000), Color(0xFFD32F2F), Color(0xFF7F0000)))
-                    ),
+                    .align(Alignment.Center)
+                    .offset(y = (-80).dp)
+                    .clip(RoundedCornerShape(50.dp))
+                    .background(Color(0xFF4CAF50).copy(alpha = 0.2f))
+                    .border(2.dp, Color(0xFF4CAF50), RoundedCornerShape(50.dp))
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
-                Text(
-                    "⚠   DEEPFAKE DETECTED",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = Color.White,
-                    letterSpacing = 2.sp,
-                    modifier = Modifier.padding(vertical = 10.dp),
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Filled.VerifiedUser, contentDescription = null, tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                    Text(
+                        "SENTINEDGE VERIFIED",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF4CAF50),
+                        letterSpacing = 1.5.sp
+                    )
+                }
             }
         }
 
@@ -181,14 +281,14 @@ fun CameraScreen(
                         VerticalDivider()
                         MiniStat(
                             label = "Blink",
-                            value = state.blinkRate?.let { "%.0f/min".format(it) } ?: "—",
-                            warning = state.blinkRate != null && (state.blinkRate < 10f || state.blinkRate > 30f),
+                            value = if (state.sourceType == SourceType.IMAGE) "N/A" else (state.blinkRate?.let { "%.0f/min".format(it) } ?: "—"),
+                            warning = state.sourceType != SourceType.IMAGE && state.blinkRate != null && (state.blinkRate < 5f || state.blinkRate > 30f),
                         )
                         VerticalDivider()
                         MiniStat(
-                            label = "Artifact",
-                            value = "%.2f".format(state.latestResult.artifactScore),
-                            warning = state.latestResult.artifactScore > 0.5f,
+                            label = "Mouth",
+                            value = if (state.sourceType == SourceType.IMAGE) "N/A" else (state.latestResult.mouthMovementScore?.let { "%.2f".format(it) } ?: "—"),
+                            warning = state.sourceType != SourceType.IMAGE && (state.latestResult.mouthMovementScore ?: 1f) < 0.3f,
                         )
                     }
                 }

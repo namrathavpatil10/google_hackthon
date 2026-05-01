@@ -28,11 +28,7 @@ fun ScanLineOverlay(verdict: Verdict, modifier: Modifier = Modifier) {
         label = "scanProgress",
     )
 
-    val lineColor = when (verdict) {
-        Verdict.REAL       -> Color(0xFF4CAF50)
-        Verdict.SUSPICIOUS -> Color(0xFFFFC107)
-        Verdict.DEEPFAKE   -> Color(0xFFFF5252)
-    }
+    val lineColor = verdictColor(verdict)
 
     Canvas(modifier = modifier.fillMaxSize()) {
         val y = size.height * progress

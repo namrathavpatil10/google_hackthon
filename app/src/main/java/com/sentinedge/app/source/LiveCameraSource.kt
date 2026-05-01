@@ -20,11 +20,18 @@ class LiveCameraSource : FrameSource, ImageAnalysis.Analyzer {
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
 
+    private var lastFrameTime = 0L
+    var samplingInterval = 100L // Dynamically updated by detector for thermal/power optimization
+
     override fun frames(): Flow<Bitmap> = _frames.asSharedFlow()
 
     override fun analyze(image: ImageProxy) {
-        val bitmap = image.toBitmap()
-        _frames.tryEmit(bitmap)
+        val currentTime = System.currentTimeMillis()
+        if (currentTime - lastFrameTime >= samplingInterval) {
+            val bitmap = image.toBitmap()
+            _frames.tryEmit(bitmap)
+            lastFrameTime = currentTime
+        }
         image.close()
     }
 

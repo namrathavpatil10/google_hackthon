@@ -44,11 +44,12 @@ fun DetectionBar(
         // Labels
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("FAKE", fontSize = 10.sp, color = Color(0xFFFF5252), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
             Text(
-                "%.0f%% confidence".format(trustScore * 100),
+                "%.0f%% Realness".format(trustScore * 100),
                 fontSize = 11.sp,
                 color = Color.White.copy(alpha = 0.7f),
                 fontWeight = FontWeight.SemiBold,

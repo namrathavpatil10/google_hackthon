@@ -12,8 +12,8 @@ android {
         applicationId = "com.sentinedge.app"
         minSdk = 30
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildTypes {
@@ -31,7 +31,14 @@ android {
         compose = true
     }
 
+    androidResources {
+        noCompress += listOf("tflite", "litertlm", "bin")
+    }
+
     packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")
         }
@@ -41,8 +48,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
 }
 
@@ -67,7 +76,9 @@ dependencies {
     implementation(libs.mlkit.face.detection)
 
     implementation(libs.litert)
+    implementation(libs.litert.lm)
 
     implementation(libs.kotlinx.coroutines.android)
     implementation("androidx.concurrent:concurrent-futures-ktx:1.1.0")
+    implementation("androidx.exifinterface:exifinterface:1.3.7")
 }

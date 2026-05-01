@@ -26,13 +26,13 @@ private val BgGradient = Brush.verticalGradient(listOf(Color(0xFF0D0D1A), Color(
 @Composable
 fun MainScreen(
     state: AnalysisState,
-    onVideoSelected: (Uri) -> Unit,
+    onMediaSelected: (Uri) -> Unit,
     onStop: () -> Unit,
 ) {
-    val videoPicker = rememberLauncherForActivityResult(
+    val mediaPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { onVideoSelected(it) }
+        uri?.let { onMediaSelected(it) }
     }
 
     Box(
@@ -65,10 +65,10 @@ fun MainScreen(
 
             // State-driven center card
             when (val s = state) {
-                is AnalysisState.Idle -> IdleCard { videoPicker.launch("video/*") }
+                is AnalysisState.Idle -> IdleCard { mediaPicker.launch("*/*") }
                 is AnalysisState.Loading -> LoadingCard()
                 is AnalysisState.Running -> RunningCard(state = s, onStop = onStop)
-                is AnalysisState.Finished -> FinishedCard(state = s, onAnalyzeAnother = { videoPicker.launch("video/*") })
+                is AnalysisState.Finished -> FinishedCard(state = s, onAnalyzeAnother = { mediaPicker.launch("*/*") })
                 is AnalysisState.Error -> ErrorCard(message = s.message, onRetry = onStop)
             }
         }
@@ -76,7 +76,7 @@ fun MainScreen(
 }
 
 @Composable
-private fun IdleCard(onPickVideo: () -> Unit) {
+private fun IdleCard(onPickMedia: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -87,28 +87,28 @@ private fun IdleCard(onPickVideo: () -> Unit) {
             .padding(28.dp),
     ) {
         Text(
-            text = "Upload a video to analyze",
+            text = "Upload a file to analyze",
             fontSize = 18.sp,
             fontWeight = FontWeight.SemiBold,
             color = Color.White,
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "SentinEdge will extract frames and score each one for deepfake artifacts using the on-device ViT model.",
+            text = "SentinEdge will scan images or videos for deepfake artifacts using the on-device ViT ensemble.",
             fontSize = 13.sp,
             color = Color.White.copy(alpha = 0.6f),
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(4.dp))
         Button(
-            onClick = onPickVideo,
+            onClick = onPickMedia,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(52.dp),
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C63FF)),
         ) {
-            Text("Upload Video File", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("Upload Media File", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }
@@ -141,10 +141,28 @@ private fun RunningCard(state: AnalysisState.Running, onStop: () -> Unit) {
             .background(Color(0xFF1E1E3A))
             .padding(28.dp),
     ) {
-        TrustScoreRing(
-            trustScore = state.latestResult.trustScore,
-            verdict = verdict,
-        )
+        if (!state.isFaceDetected) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(140.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Color(0xFFFF5252).copy(alpha = 0.1f))
+            ) {
+                Text(
+                    "No face detected",
+                    color = Color(0xFFFF5252),
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp
+                )
+            }
+        } else {
+            TrustScoreRing(
+                trustScore = state.latestResult.trustScore,
+                verdict = verdict,
+            )
+        }
 
         StatRow("Frames analyzed", "${state.framesAnalyzed}")
         state.blinkRate?.let { rate ->
@@ -155,7 +173,10 @@ private fun RunningCard(state: AnalysisState.Running, onStop: () -> Unit) {
             }
             StatRow("Blink rate", "%.1f /min ($label)".format(rate))
         }
-        StatRow("Artifact score", "%.3f".format(state.latestResult.artifactScore))
+        StatRow("Artifact score", "%.3f".format(state.latestResult.confidence))
+        state.latestResult.livenessScore?.let { score ->
+            StatRow("NPU Liveness", "%.1f%%".format(score * 100))
+        }
 
         OutlinedButton(
             onClick = onStop,
@@ -170,11 +191,7 @@ private fun RunningCard(state: AnalysisState.Running, onStop: () -> Unit) {
 
 @Composable
 private fun FinishedCard(state: AnalysisState.Finished, onAnalyzeAnother: () -> Unit) {
-    val verdictColor = when (state.verdict) {
-        Verdict.REAL -> Color(0xFF4CAF50)
-        Verdict.SUSPICIOUS -> Color(0xFFFFC107)
-        Verdict.DEEPFAKE -> Color(0xFFF44336)
-    }
+    val color = verdictColor(state.verdict)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -184,26 +201,51 @@ private fun FinishedCard(state: AnalysisState.Finished, onAnalyzeAnother: () -> 
             .background(Color(0xFF1E1E3A))
             .padding(28.dp),
     ) {
+        Text(
+            text = "Analysis Complete",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White.copy(alpha = 0.5f),
+            letterSpacing = 1.sp
+        )
+
         TrustScoreRing(
             trustScore = state.finalScore,
             verdict = state.verdict,
             ringSize = 180.dp,
         )
+        
         Text(
             text = when (state.verdict) {
-                Verdict.REAL -> "Likely authentic"
-                Verdict.SUSPICIOUS -> "Suspicious — review carefully"
-                Verdict.DEEPFAKE -> "Deepfake detected"
+                Verdict.REAL -> "LIKELY AUTHENTIC"
+                Verdict.SUSPICIOUS -> "SUSPICIOUS CONTENT"
+                Verdict.DEEPFAKE -> "DEEPFAKE DETECTED"
             },
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold,
-            color = verdictColor,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = color,
             textAlign = TextAlign.Center,
+            letterSpacing = 1.sp
         )
-        StatRow("Frames analyzed", "${state.framesAnalyzed}")
-        StatRow("Average trust score", "%.1f%%".format(state.finalScore * 100))
 
-        Spacer(Modifier.height(4.dp))
+        Text(
+            text = state.result?.explanation ?: "The analysis examined visual patterns, anatomical consistency, and metadata integrity.",
+            fontSize = 13.sp,
+            color = Color.White.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            lineHeight = 18.sp
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            StatRow("Total frames", "${state.framesAnalyzed}")
+            StatRow("Final Trust", "%.1f%%".format(state.finalScore * 100))
+            StatRow("Hardware", state.accelerator)
+        }
+
+        Spacer(Modifier.height(12.dp))
+        
         Button(
             onClick = onAnalyzeAnother,
             modifier = Modifier
@@ -212,7 +254,7 @@ private fun FinishedCard(state: AnalysisState.Finished, onAnalyzeAnother: () -> 
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6C63FF)),
         ) {
-            Text("Analyze Another Video", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text("Analyze Another File", fontSize = 16.sp, fontWeight = FontWeight.Bold)
         }
     }
 }

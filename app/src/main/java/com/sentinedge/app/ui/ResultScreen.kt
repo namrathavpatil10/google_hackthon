@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.VideoFile
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -31,7 +31,7 @@ fun ResultScreen(
     onAnalyzeAnother: (Uri) -> Unit,
     onLiveCamera: () -> Unit,
 ) {
-    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+    val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { onAnalyzeAnother(it) }
     }
 
@@ -58,10 +58,14 @@ fun ResultScreen(
 
             // Icon
             Icon(
-                imageVector = if (state.verdict == Verdict.REAL) Icons.Filled.CheckCircle else Icons.Filled.Warning,
+                imageVector = when (state.verdict) {
+                    Verdict.REAL -> Icons.Filled.CheckCircle
+                    Verdict.SUSPICIOUS -> Icons.Filled.Warning
+                    Verdict.DEEPFAKE -> Icons.Filled.Warning
+                },
                 contentDescription = null,
                 tint = color,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(64.dp),
             )
 
             Spacer(Modifier.height(16.dp))
@@ -82,28 +86,26 @@ fun ResultScreen(
             // Verdict text
             Text(
                 text = when (state.verdict) {
-                    Verdict.REAL -> "Likely Authentic"
-                    Verdict.SUSPICIOUS -> "Suspicious Content"
-                    Verdict.DEEPFAKE -> "Deepfake Detected"
+                    Verdict.REAL -> "LIKELY AUTHENTIC"
+                    Verdict.SUSPICIOUS -> "SUSPICIOUS CONTENT"
+                    Verdict.DEEPFAKE -> "DEEPFAKE DETECTED"
                 },
-                fontSize = 26.sp,
+                fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = color,
                 textAlign = TextAlign.Center,
+                letterSpacing = 2.sp
             )
 
             Spacer(Modifier.height(8.dp))
 
             Text(
-                text = when (state.verdict) {
-                    Verdict.REAL -> "No deepfake artifacts found. This video appears genuine."
-                    Verdict.SUSPICIOUS -> "Some artifacts detected. Exercise caution with this content."
-                    Verdict.DEEPFAKE -> "Strong deepfake signals detected. This video is likely AI-generated."
-                },
-                fontSize = 13.sp,
-                color = Color.White.copy(alpha = 0.55f),
+                text = state.result?.explanation ?: "The analysis examined visual patterns, anatomical consistency, and metadata integrity. The resulting score reflects the ensemble confidence across multiple detection models.",
+                fontSize = 14.sp,
+                color = Color.White.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
-                lineHeight = 19.sp,
+                lineHeight = 20.sp,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
 
             Spacer(Modifier.height(32.dp))
@@ -119,7 +121,18 @@ fun ResultScreen(
             ) {
                 ResultStatRow("Final trust score", "%.1f%%".format(state.finalScore * 100), color)
                 Divider(color = Color.White.copy(alpha = 0.07f))
-                ResultStatRow("Total frames scanned", "${state.framesAnalyzed}", Color.White)
+                
+                if (state.result?.watermarkFound == true) {
+                    ResultStatRow("AI Watermark", "FOUND", Color.Red)
+                    Divider(color = Color.White.copy(alpha = 0.07f))
+                }
+                
+                if (state.result?.metadataSuspicious == true) {
+                    ResultStatRow("Metadata Integrity", "SUSPICIOUS", Color.Yellow)
+                    Divider(color = Color.White.copy(alpha = 0.07f))
+                }
+
+                ResultStatRow("NPU Accelerator", state.accelerator, if (state.accelerator == "NPU") Color(0xFF4FC3F7) else color)
                 Divider(color = Color.White.copy(alpha = 0.07f))
                 ResultStatRow("Verdict", state.verdict.name, color)
             }
@@ -128,14 +141,14 @@ fun ResultScreen(
 
             // Action buttons
             Button(
-                onClick = { videoPicker.launch("video/*") },
+                onClick = { mediaPicker.launch("*/*") },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C6FFF)),
             ) {
-                Icon(Icons.Filled.VideoFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Analyze Another Video", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("Analyze Another File", fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
 
             Spacer(Modifier.height(12.dp))
@@ -151,7 +164,7 @@ fun ResultScreen(
             ) {
                 Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
-                Text("Switch to Live Camera", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                Text("Protect Video Call", fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
 
             Spacer(Modifier.height(36.dp))

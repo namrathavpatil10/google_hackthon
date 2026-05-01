@@ -22,9 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sentinedge.app.Verdict
 
-private val ColorReal = Color(0xFF4CAF50)
-private val ColorSuspicious = Color(0xFFFFC107)
-private val ColorDeepfake = Color(0xFFF44336)
+
 
 @Composable
 fun TrustScoreRing(
@@ -40,11 +38,7 @@ fun TrustScoreRing(
         label = "trustScore"
     )
     val ringColor by animateColorAsState(
-        targetValue = when (verdict) {
-            Verdict.REAL -> ColorReal
-            Verdict.SUSPICIOUS -> ColorSuspicious
-            Verdict.DEEPFAKE -> ColorDeepfake
-        },
+        targetValue = verdictColor(verdict),
         animationSpec = tween(durationMillis = 400),
         label = "ringColor"
     )
@@ -83,22 +77,18 @@ fun TrustScoreRing(
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = "${(trustScore * 100).toInt()}%",
+                text = "${(animatedScore * 100).toInt()}%",
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = ringColor,
             )
             Text(
-                text = verdict.label(),
-                fontSize = 12.sp,
+                text = "REALNESS",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.ExtraBold,
                 color = ringColor,
+                letterSpacing = 1.sp
             )
         }
     }
-}
-
-private fun Verdict.label() = when (this) {
-    Verdict.REAL -> "REAL"
-    Verdict.SUSPICIOUS -> "SUSPICIOUS"
-    Verdict.DEEPFAKE -> "DEEPFAKE"
 }
