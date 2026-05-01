@@ -18,10 +18,12 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
+import com.sentinedge.app.MainActivity
 import com.sentinedge.app.R
 import com.sentinedge.app.ml.DeepfakeDetector
 import com.sentinedge.app.ml.FaceInfo
@@ -85,36 +87,62 @@ class LiveProtectionService : Service() {
             type = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
             format = PixelFormat.TRANSLUCENT
             flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
             width = WindowManager.LayoutParams.WRAP_CONTENT
             height = WindowManager.LayoutParams.WRAP_CONTENT
-            gravity = Gravity.TOP or Gravity.END
-            x = 20
-            y = 150 
+            gravity = Gravity.TOP or Gravity.START
+            x = 100
+            y = 100 
         }
 
-        // Create a clear status card overlay
+        // Create a draggable status card overlay
         overlayView = TextView(this).apply {
-            text = "SECURE ✓"
+            text = "🛡️ SECURE"
             setTextColor(0xFF4CAF50.toInt())
             textSize = 14f
             setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(40, 20, 40, 20)
+            setPadding(40, 25, 40, 25)
             gravity = Gravity.CENTER
             
-            // Add a high-contrast dark background with purple border
             val drawable = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0xEE000000.toInt())
-                cornerRadius = 30f
+                setColor(0xEE1A1A3A.toInt())
+                cornerRadius = 50f
                 setStroke(3, 0xFF7C6FFF.toInt())
             }
             background = drawable
+
+            // Drag-to-move implementation
+            var initialX = 0
+            var initialY = 0
+            var initialTouchX = 0f
+            var initialTouchY = 0f
+
+            setOnTouchListener { _, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> {
+                        initialX = layoutParams.x
+                        initialY = layoutParams.y
+                        initialTouchX = event.rawX
+                        initialTouchY = event.rawY
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        layoutParams.x = initialX + (event.rawX - initialTouchX).toInt()
+                        layoutParams.y = initialY + (event.rawY - initialTouchY).toInt()
+                        windowManager.updateViewLayout(this, layoutParams)
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        performClick()
+                        true
+                    }
+                    else -> false
+                }
+            }
         }
         
         statusText = overlayView as TextView
         windowManager.addView(overlayView, layoutParams)
-        Log.d("LiveProtectionService", "Overlay added to WindowManager (High Contrast)")
     }
 
     private fun startScreenCapture() {
