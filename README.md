@@ -1,5 +1,10 @@
 # SentinEdge
 
+> [!NOTE]
+> 🆕 **v2 now available** — [View Release](https://github.com/namrathavpatil10/google_hackthon/releases/tag/v2)
+
+---
+
 # Application Description
 
 It’s 2 AM. Your phone rings a video call from someone in a bank uniform, calm and authoritative. They say your account has been compromised and need your OTP to freeze it. The face looks real. The voice sounds real. You almost type the code.
