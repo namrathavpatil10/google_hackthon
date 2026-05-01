@@ -5,6 +5,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,6 +30,7 @@ fun MainScreen(
     state: AnalysisState,
     onMediaSelected: (Uri) -> Unit,
     onStop: () -> Unit,
+    downloadProgress: Int? = null,
 ) {
     val mediaPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -46,7 +49,9 @@ fun MainScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 32.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 32.dp)
+                .padding(vertical = 48.dp),
         ) {
             // App title
             Text(
@@ -68,7 +73,7 @@ fun MainScreen(
                 is AnalysisState.Idle -> IdleCard { mediaPicker.launch("*/*") }
                 is AnalysisState.Loading -> LoadingCard()
                 is AnalysisState.Running -> RunningCard(state = s, onStop = onStop)
-                is AnalysisState.Finished -> FinishedCard(state = s, onAnalyzeAnother = { mediaPicker.launch("*/*") })
+                is AnalysisState.Finished -> FinishedCard(state = s, onAnalyzeAnother = { mediaPicker.launch("*/*") }, downloadProgress = downloadProgress)
                 is AnalysisState.Error -> ErrorCard(message = s.message, onRetry = onStop)
             }
         }
@@ -125,7 +130,13 @@ private fun LoadingCard() {
             .padding(28.dp),
     ) {
         CircularProgressIndicator(color = Color(0xFF6C63FF))
-        Text("Preparing video…", color = Color.White)
+        Text("Analyzing your media...", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        Text(
+            "Running deepfake detection on-device",
+            color = Color.White.copy(alpha = 0.5f),
+            fontSize = 12.sp,
+            textAlign = TextAlign.Center,
+        )
     }
 }
 
@@ -190,7 +201,7 @@ private fun RunningCard(state: AnalysisState.Running, onStop: () -> Unit) {
 }
 
 @Composable
-private fun FinishedCard(state: AnalysisState.Finished, onAnalyzeAnother: () -> Unit) {
+private fun FinishedCard(state: AnalysisState.Finished, onAnalyzeAnother: () -> Unit, downloadProgress: Int? = null) {
     val color = verdictColor(state.verdict)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -228,13 +239,27 @@ private fun FinishedCard(state: AnalysisState.Finished, onAnalyzeAnother: () -> 
             letterSpacing = 1.sp
         )
 
-        Text(
-            text = state.result?.explanation ?: "The analysis examined visual patterns, anatomical consistency, and metadata integrity.",
-            fontSize = 13.sp,
-            color = Color.White.copy(alpha = 0.7f),
-            textAlign = TextAlign.Center,
-            lineHeight = 18.sp
-        )
+        if (state.result?.explanation.isNullOrBlank() && downloadProgress != null) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = Color(0xFF7B61FF))
+                Text(
+                    "AI Reasoning model downloading ($downloadProgress%)...",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.45f),
+                )
+            }
+        } else if (!state.result?.explanation.isNullOrBlank()) {
+            Text(
+                text = state.result!!.explanation,
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center,
+                lineHeight = 18.sp,
+            )
+        }
 
         Spacer(Modifier.height(8.dp))
 

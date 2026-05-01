@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(/Users/namrathavpatil/Library/Android/sdk/platform-tools/adb -s R3CXC0805CV shell pm list packages -3)"
+    ]
+  }
+}

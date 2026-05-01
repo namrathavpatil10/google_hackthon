@@ -25,5 +25,5 @@ local.properties
 *.iml
 
 deepfake_saved_model/
-*.tflite
+
 *.data

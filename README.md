@@ -1,0 +1,245 @@
+# SentinEdge
+
+Real-time deepfake detection on Android. Upload a photo or video, scan a live camera feed, or run a background shield over your video calls — SentinEdge tells you if the face is AI-generated, entirely on-device.
+
+---
+
+## Screenshots
+
+### Model Download (first launch)
+![Model downloading on first launch](docs/screenshots/model_download.png)
+> *App downloads the Gemma 4 2B LiteRT-LM model (~2 GB) on first launch with a progress bar. After that it runs fully offline.*
+
+### Video / Image Analysis
+![Video analysis result screen](docs/screenshots/video_analysis.png)
+> *Upload any image or video clip — SentinEdge runs the dual-model ensemble and forensic pre-scan, then shows a trust score, watermark flags, and a Gemma-generated explanation.*
+
+### Live Camera
+![Live camera deepfake detection](docs/screenshots/live_camera.png)
+> *Point the camera at a screen or person. The trust score ring and detection bar update in real time — green = real, red = deepfake.*
+
+### Live Call Protection Overlay
+![Floating overlay on a video call](docs/screenshots/live_call_overlay.png)
+> *Floating badge sits on top of WhatsApp / Zoom / Meet while you talk. Turns red the moment a deepfake is detected.*
+
+---
+
+## What it does
+
+Most deepfake detectors run in the cloud. SentinEdge runs **entirely on-device** on the Samsung Galaxy S25 Ultra — your video never leaves your phone.
+
+Three modes:
+
+| Mode | How to use |
+|---|---|
+| **Media Upload** | Pick an image or video from your gallery — get a full forensic report |
+| **Live Camera** | Point at a screen or person — score updates every frame in real time |
+| **Background Protection** | Invisible overlay monitors WhatsApp / Zoom / Meet while you talk |
+
+---
+
+## How it works
+
+### Full detection pipeline
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                   FORENSIC PRE-SCAN (before NPU)             │
+│   SafetyVerificationEngine                                    │
+│   ├─ EXIF metadata check (camera make/model absent?)         │
+│   ├─ AI software signatures (Midjourney, DALL-E, Firefly…)   │
+│   ├─ C2PA / JUMBF content authenticity markers               │
+│   ├─ IPTC DigitalSourceType AI tags                          │
+│   └─ Adobe Generative / SynthID byte-level scan              │
+│                                                               │
+│   Result: watermarkFound + metadataSuspicious flags           │
+│   → If watermark found: trust score immediately → 0.1         │
+└─────────────────────────────┬────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│                       Frame Source                            │
+│   Image/Video ──┐                                            │
+│   CameraX ──────┼──► FrameSource ──► Bitmap frame            │
+│   MediaProjection ─┘                                         │
+└─────────────────────────────┬────────────────────────────────┘
+                              │
+                              ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  ML Kit Face Detection                        │
+│         Crop face region · track eye state · landmarks        │
+└──────────┬──────────────────────────────────────┬────────────┘
+           │                                      │
+           ▼                                      ▼
+┌──────────────────────┐              ┌─────────────────────────┐
+│   LiteRT Vision      │              │   BlinkTracker          │
+│   (Qualcomm NPU)     │              │   (ML Kit eye-open)     │
+│                      │              │   blink rate / min       │
+│  Static image:       │              └──────────┬──────────────┘
+│   V1 only (dima806)  │                         │
+│                      │              ┌─────────────────────────┐
+│  Live video:         │              │   HRNet Face Landmarks  │
+│   V1 (40%) + V2(60%) │              │   mouth movement score  │
+│   ensemble           │              └──────────┬──────────────┘
+└──────────┬───────────┘                         │
+           │  visual_score                        │
+           └──────────────┬──────────────────────┘
+                          ▼
+          ┌───────────────────────────────────┐
+          │         Signal Combiner            │
+          │  visual_score + blink + mouth      │
+          └──────────────┬────────────────────┘
+                         │
+                         ▼
+          ┌───────────────────────────────────┐
+          │        TemporalEngine              │
+          │  20-frame rolling window           │
+          │  variance > 0.03  → glitch flag    │
+          │  landmark jitter > 0.12 → flag     │
+          │  glitch detected → score –0.4      │
+          └──────────────┬────────────────────┘
+                         │
+          ┌──────────────┴──────────────────────┐
+          ▼                                     ▼
+   score ≥ 0.5                           score < 0.5
+   ✅ REAL                               🚨 DEEPFAKE
+   Green ring                            Red banner
+          │
+          ▼
+   Gemma 4 2B (LiteRT-LM)
+   Plain-language explanation
+   "Blink rate 3/min detected —
+    well below human average…"
+```
+
+### Score breakdown
+
+```
+V1 ViT — dima806 (static)       V1 40% + V2 60% (live)
+         │                               │
+         └──────────┬────────────────────┘
+                    │ visual_score
+                    │
+              Blink signal  ──── abnormal = –score
+              Mouth movement ─── unnatural = –score
+              Temporal jitter ── glitchy  = –0.4
+                    │
+             EXIF / watermark
+             pre-scan flags
+                    │
+                    ▼
+         Combined trust score
+   0.0 ─────────────────────── 1.0
+   🔴 Fake         🟠       🟢 Real
+   < 0.5          0.5–0.7    ≥ 0.8
+```
+
+### Accelerator fallback
+
+```
+On boot, tries in order:
+  1. NPU  (Qualcomm Hexagon — Snapdragon 8 Elite)
+  2. GPU  (Adreno)
+  3. CPU  (XNNPACK fallback)
+
+LiteRT-LM (Gemma 4 2B):
+  1. GPU  (Adreno)
+  2. CPU
+```
+
+---
+
+## Models used
+
+### HuggingFace
+
+| Model | Repo | Role |
+|---|---|---|
+| `deepfake_detector.tflite` (V1) | [dima806/deepfake_vs_real_image_detection](https://huggingface.co/dima806/deepfake_vs_real_image_detection) | Primary ViT — real vs. AI-generated face. Used alone for static images. |
+| `deepfake_detector_v2.tflite` (V2) | Second fine-tuned ViT checkpoint | Ensemble partner in live mode — weighted 60% |
+| `gemma-4-E2B-it_qualcomm_sm8750.litertlm` | [litert-community/gemma-4-E2B-it-litert-lm](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) | On-device LLM — generates the plain-language explanation |
+
+### On-device / Qualcomm
+
+| Model | File | Role |
+|---|---|---|
+| HRNet face landmarks | `hrnet_face.tflite` | Facial keypoints — feeds mouth movement + asymmetry signal |
+| Gemma 4 2B SM8750 | `gemma-4-E2B-it_qualcomm_sm8750.litertlm` | Pre-compiled for Snapdragon 8 Elite NPU via Qualcomm AI Hub |
+
+---
+
+## LiteRT integration
+
+Uses the **LiteRT compiled model API** — not the old TFLite package.
+
+```
+com.google.ai.edge.litert:litert:2.1.4           core runtime (CompiledModel)
+com.google.ai.edge.litert:litert-gpu:1.4.2       GPU delegate (Adreno)
+com.google.ai.edge.litertlm:litertlm-android     LiteRT-LM for Gemma 4 2B
+```
+
+`DeepfakeDetector.kt` uses `CompiledModel.create()` and `Accelerator.NPU / GPU / CPU` — the new LiteRT API, not `Interpreter`.
+
+---
+
+## Tech stack
+
+| Layer | What we used |
+|---|---|
+| Language | Kotlin |
+| UI | Jetpack Compose |
+| Camera | CameraX |
+| ML runtime | LiteRT — `com.google.ai.edge.litert` |
+| LLM runtime | LiteRT-LM — `com.google.ai.edge.litertlm` |
+| Face tracking | ML Kit Face Detection |
+| Screen capture | MediaProjection + WindowManager floating overlay |
+| Forensic scan | EXIF / C2PA / IPTC / SynthID byte-level scan |
+| Temporal analysis | Custom TemporalEngine (variance + jitter, 20-frame window) |
+| Architecture | MVVM, Kotlin coroutines + Flow |
+| Target device | Samsung Galaxy S25 Ultra (Android 15, API 35) |
+| Min SDK | API 30 |
+
+---
+
+## Running the app
+
+1. Clone the repo
+2. Open in Android Studio (Ladybug or newer)
+3. Build and run on a physical Android device (API 30+)
+4. On first launch the app downloads `gemma-4-E2B-it_qualcomm_sm8750.litertlm` (~2 GB) automatically — wait for the progress bar to complete before scanning
+5. Place `deepfake_detector.tflite` and `deepfake_detector_v2.tflite` in `app/src/main/assets/` (not in repo due to size)
+6. For background protection mode: grant "Draw over other apps" permission when prompted
+
+Demo tip: play a known deepfake clip on a second screen and point the live camera at it.
+
+---
+
+## Project structure
+
+```
+app/src/main/java/com/sentinedge/app/
+├── ml/
+│   ├── DeepfakeDetector.kt         — LiteRT CompiledModel, NPU/GPU/CPU fallback, dual-model ensemble
+│   ├── BlinkTracker.kt             — ML Kit blink rate signal
+│   ├── TemporalEngine.kt           — 20-frame variance + jitter analysis
+│   ├── SafetyVerificationEngine.kt — EXIF / C2PA / IPTC / watermark forensic pre-scan
+│   └── ModelDownloader.kt          — background download of Gemma 4 2B on first launch
+├── source/
+│   ├── FrameSource.kt              — sealed interface for all frame inputs
+│   ├── LiveCameraSource.kt         — CameraX ImageAnalysis pipeline
+│   └── DebugFileSource.kt          — video file pipeline for testing without hardware
+├── service/
+│   └── LiveProtectionService.kt    — foreground service: MediaProjection + floating overlay
+├── ui/
+│   ├── HomeScreen.kt               — three-mode launcher
+│   ├── VideoAnalysisScreen.kt      — upload + analyse flow
+│   ├── CameraScreen.kt             — live camera view
+│   ├── ResultScreen.kt             — trust score + watermark flags + Gemma explanation
+│   ├── TrustOverlay.kt             — animated score ring overlay
+│   ├── DetectionBar.kt             — frame-by-frame detection bar
+│   ├── ScanLineOverlay.kt          — scanning animation
+│   ├── VerdictColor.kt             — green/amber/red color logic
+│   └── MainScreen.kt               — top-level nav host
+├── MainActivity.kt
+└── MainViewModel.kt
+```

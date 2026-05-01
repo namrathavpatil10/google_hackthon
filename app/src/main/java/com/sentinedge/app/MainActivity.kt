@@ -119,21 +119,23 @@ class MainActivity : ComponentActivity() {
                                 })
                             }
                         } else {
-                            VideoAnalysisScreen(state = s, onStop = viewModel::stopAnalysis)
+                            VideoAnalysisScreen(state = s, onStop = viewModel::stopAnalysis, downloadProgress = downloadProgress)
                         }
                     }
 
-                    is AnalysisState.Finished -> {
-                        // REMOVED ResultScreen usage. Handling finished state within MainScreen or same screen.
-                        MainScreen(state = s, onMediaSelected = { uri -> 
+                    is AnalysisState.Finished -> ResultScreen(
+                        state = s,
+                        onAnalyzeAnother = { uri ->
                             val mimeType = contentResolver.getType(uri)
                             if (mimeType?.startsWith("video") == true) {
                                 viewModel.analyzeVideo(uri)
                             } else {
                                 viewModel.analyzeImage(uri)
                             }
-                        }, onStop = viewModel::stopAnalysis)
-                    }
+                        },
+                        onLiveCamera = { cameraSource = viewModel.startLiveCamera() },
+                        downloadProgress = downloadProgress,
+                    )
 
                     is AnalysisState.Error -> MainScreen(
                         state = s,

@@ -3,6 +3,8 @@ package com.sentinedge.app.ui
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -26,6 +28,7 @@ import com.sentinedge.app.toVerdict
 fun VideoAnalysisScreen(
     state: AnalysisState.Running,
     onStop: () -> Unit,
+    downloadProgress: Int? = null,
 ) {
     val verdict = state.latestResult.trustScore.toVerdict()
 
@@ -38,6 +41,7 @@ fun VideoAnalysisScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp),
         ) {
             Spacer(Modifier.height(52.dp))
@@ -132,7 +136,62 @@ fun VideoAnalysisScreen(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
+            val explanation = state.latestResult.explanation
+            if (explanation.isNotBlank()) {
+                Spacer(Modifier.height(16.dp))
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(Color(0xFF1A1A3A))
+                        .padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text("AI FORENSIC ANALYSIS", fontSize = 12.sp, color = Color(0xFF7B61FF), fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                    Text(explanation, fontSize = 13.sp, color = Color.White.copy(alpha = 0.8f), lineHeight = 19.sp)
+                }
+            } else if (downloadProgress != null) {
+                Spacer(Modifier.height(16.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFF1A1A3A))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    PulsingDot()
+                    Text(
+                        "AI Reasoning model downloading ($downloadProgress%)...",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.5f),
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            if (downloadProgress != null) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.White.copy(alpha = 0.05f))
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Text("Downloading AI Reasoning ($downloadProgress%)", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                    LinearProgressIndicator(
+                        progress = { downloadProgress / 100f },
+                        modifier = Modifier.width(80.dp).height(4.dp).clip(RoundedCornerShape(2.dp)),
+                        color = Color(0xFF7B61FF),
+                        trackColor = Color.White.copy(alpha = 0.1f),
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+            }
 
             // Stop button
             OutlinedButton(

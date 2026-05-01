@@ -38,6 +38,16 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            pickFirsts += setOf(
+                "lib/arm64-v8a/libLiteRt.so",
+                "lib/arm64-v8a/libLiteRtClGlAccelerator.so",
+                "lib/armeabi-v7a/libLiteRt.so",
+                "lib/armeabi-v7a/libLiteRtClGlAccelerator.so",
+                "lib/x86_64/libLiteRt.so",
+                "lib/x86_64/libLiteRtClGlAccelerator.so",
+                "lib/x86/libLiteRt.so",
+                "lib/x86/libLiteRtClGlAccelerator.so",
+            )
         }
         resources {
             excludes += setOf("/META-INF/{AL2.0,LGPL2.1}")

@@ -13,6 +13,7 @@ import com.sentinedge.app.ml.ModelDownloader
 import com.sentinedge.app.source.DebugFileSource
 import com.sentinedge.app.source.FrameSource
 import com.sentinedge.app.source.LiveCameraSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -138,6 +139,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     result = result,
                     accelerator = result.acceleratorUsed
                 )
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 android.util.Log.e("MainViewModel", "Analysis failed", e)
                 _state.value = AnalysisState.Error(e.message ?: "Analysis failed")
@@ -208,6 +211,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                         accelerator = bestResult?.acceleratorUsed ?: lastResult?.acceleratorUsed ?: "CPU"
                     )
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 _state.value = AnalysisState.Error(e.message ?: "Analysis failed")
             }

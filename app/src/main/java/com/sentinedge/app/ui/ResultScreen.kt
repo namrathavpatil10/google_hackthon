@@ -3,9 +3,12 @@ package com.sentinedge.app.ui
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
@@ -30,6 +33,7 @@ fun ResultScreen(
     state: AnalysisState.Finished,
     onAnalyzeAnother: (Uri) -> Unit,
     onLiveCamera: () -> Unit,
+    downloadProgress: Int? = null,
 ) {
     val mediaPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { onAnalyzeAnother(it) }
@@ -37,43 +41,48 @@ fun ResultScreen(
 
     val color = verdictColor(state.verdict)
     val bgColor = when (state.verdict) {
-        Verdict.REAL -> Color(0xFF0A1A0A)
+        Verdict.REAL       -> Color(0xFF0A1A0A)
         Verdict.SUSPICIOUS -> Color(0xFF1A160A)
-        Verdict.DEEPFAKE -> Color(0xFF1A0A0A)
+        Verdict.DEEPFAKE   -> Color(0xFF1A0A0A)
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(bgColor, Color(0xFF0A0A1A)))),
-        contentAlignment = Alignment.Center,
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 28.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 28.dp)
+                .padding(vertical = 60.dp),
         ) {
-            Spacer(Modifier.height(48.dp))
-
-            // Icon
+            // Top icon
             Icon(
                 imageVector = when (state.verdict) {
-                    Verdict.REAL -> Icons.Filled.CheckCircle
-                    Verdict.SUSPICIOUS -> Icons.Filled.Warning
-                    Verdict.DEEPFAKE -> Icons.Filled.Warning
+                    Verdict.REAL     -> Icons.Filled.CheckCircle
+                    else             -> Icons.Filled.Warning
                 },
                 contentDescription = null,
                 tint = color,
-                modifier = Modifier.size(64.dp),
+                modifier = Modifier.size(56.dp),
             )
 
             Spacer(Modifier.height(16.dp))
 
-            Text("Analysis Complete", fontSize = 13.sp, color = Color.White.copy(alpha = 0.4f), letterSpacing = 1.sp)
-            Spacer(Modifier.height(8.dp))
+            Text(
+                "ANALYSIS COMPLETE",
+                fontSize = 13.sp,
+                color = Color.White.copy(alpha = 0.45f),
+                letterSpacing = 1.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
 
-            // Big ring
+            Spacer(Modifier.height(16.dp))
+
+            // Trust ring
             TrustScoreRing(
                 trustScore = state.finalScore,
                 verdict = state.verdict,
@@ -83,63 +92,94 @@ fun ResultScreen(
 
             Spacer(Modifier.height(24.dp))
 
-            // Verdict text
+            // Verdict
             Text(
                 text = when (state.verdict) {
-                    Verdict.REAL -> "LIKELY AUTHENTIC"
+                    Verdict.REAL       -> "LIKELY AUTHENTIC"
                     Verdict.SUSPICIOUS -> "SUSPICIOUS CONTENT"
-                    Verdict.DEEPFAKE -> "DEEPFAKE DETECTED"
+                    Verdict.DEEPFAKE   -> "DEEPFAKE DETECTED"
                 },
                 fontSize = 24.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = color,
                 textAlign = TextAlign.Center,
-                letterSpacing = 2.sp
+                letterSpacing = 2.sp,
             )
 
             Spacer(Modifier.height(8.dp))
 
-            Text(
-                text = state.result?.explanation ?: "The analysis examined visual patterns, anatomical consistency, and metadata integrity. The resulting score reflects the ensemble confidence across multiple detection models.",
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center,
-                lineHeight = 20.sp,
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+            // Explanation or download note
+            if (!state.result?.explanation.isNullOrBlank()) {
+                Text(
+                    text = state.result!!.explanation,
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+            } else if (downloadProgress != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 2.dp,
+                        color = Color(0xFF7B61FF),
+                    )
+                    Text(
+                        "AI Reasoning model downloading ($downloadProgress%)...",
+                        fontSize = 12.sp,
+                        color = Color.White.copy(alpha = 0.45f),
+                    )
+                }
+            } else {
+                Text(
+                    text = "The analysis examined visual patterns, anatomical consistency, and metadata integrity.",
+                    fontSize = 14.sp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center,
+                    lineHeight = 20.sp,
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                )
+            }
 
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(28.dp))
 
-            // Summary card
+            // Stats card
             Column(
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(20.dp))
-                    .background(Color(0xFF1A1A3A))
-                    .padding(24.dp),
+                    .background(Color(0xFF1A1A3A)),
             ) {
                 ResultStatRow("Final trust score", "%.1f%%".format(state.finalScore * 100), color)
-                Divider(color = Color.White.copy(alpha = 0.07f))
-                
+                HorizontalDivider(color = Color.White.copy(alpha = 0.07f), modifier = Modifier.padding(horizontal = 20.dp))
+
                 if (state.result?.watermarkFound == true) {
-                    ResultStatRow("AI Watermark", "FOUND", Color.Red)
-                    Divider(color = Color.White.copy(alpha = 0.07f))
-                }
-                
-                if (state.result?.metadataSuspicious == true) {
-                    ResultStatRow("Metadata Integrity", "SUSPICIOUS", Color.Yellow)
-                    Divider(color = Color.White.copy(alpha = 0.07f))
+                    ResultStatRow("AI Watermark", "FOUND", Color(0xFFFF5252))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.07f), modifier = Modifier.padding(horizontal = 20.dp))
                 }
 
-                ResultStatRow("NPU Accelerator", state.accelerator, if (state.accelerator == "NPU") Color(0xFF4FC3F7) else color)
-                Divider(color = Color.White.copy(alpha = 0.07f))
+                if (state.result?.metadataSuspicious == true) {
+                    ResultStatRow("Metadata Integrity", "SUSPICIOUS", Color(0xFFFFC107))
+                    HorizontalDivider(color = Color.White.copy(alpha = 0.07f), modifier = Modifier.padding(horizontal = 20.dp))
+                }
+
+                ResultStatRow(
+                    "NPU Accelerator",
+                    state.accelerator,
+                    if (state.accelerator.contains("NPU")) Color(0xFF4FC3F7) else color,
+                )
+                HorizontalDivider(color = Color.White.copy(alpha = 0.07f), modifier = Modifier.padding(horizontal = 20.dp))
                 ResultStatRow("Verdict", state.verdict.name, color)
             }
 
-            Spacer(Modifier.weight(1f))
+            Spacer(Modifier.height(28.dp))
 
-            // Action buttons
+            // Primary button
             Button(
                 onClick = { mediaPicker.launch("*/*") },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -153,21 +193,18 @@ fun ResultScreen(
 
             Spacer(Modifier.height(12.dp))
 
+            // Secondary button
             OutlinedButton(
                 onClick = onLiveCamera,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF4FC3F7)),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = Brush.linearGradient(listOf(Color(0xFF4FC3F7), Color(0xFF0277BD)))
-                ),
+                border = BorderStroke(1.dp, Color(0xFF4FC3F7)),
             ) {
                 Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Protect Video Call", fontSize = 15.sp, fontWeight = FontWeight.Bold)
             }
-
-            Spacer(Modifier.height(36.dp))
         }
     }
 }
@@ -177,7 +214,9 @@ private fun ResultStatRow(label: String, value: String, valueColor: Color) {
     Row(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 14.dp),
     ) {
         Text(label, color = Color.White.copy(alpha = 0.5f), fontSize = 13.sp)
         Text(value, color = valueColor, fontSize = 13.sp, fontWeight = FontWeight.Bold)

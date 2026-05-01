@@ -70,7 +70,7 @@ class DeepfakeDetector(private val context: Context) {
     private val livenessModelFileV1 = "deepfake_detector_v1.tflite"
     private val livenessModelFileV2 = "deepfake_detector_v2.tflite"
     private val hrNetModelFile = "hrnet_face.tflite"
-    private val gemmaModelName = "gemma.litertlm"
+    private val gemmaModelName = "gemma-4-E2B-it_qualcomm_sm8750.litertlm"
     
     private var livenessInputSize = 224 
 
