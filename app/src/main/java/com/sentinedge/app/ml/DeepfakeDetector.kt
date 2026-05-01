@@ -118,6 +118,8 @@ class DeepfakeDetector(private val context: Context) {
         lastExplanation = "Analysis: Initializing detection..."
     }
 
+    // Tries to load all models with the given accelerator (NPU → GPU → CPU fallback order).
+    // Returns true on success; init() uses the first accelerator that does not throw.
     private fun tryInit(accelerator: Accelerator): Boolean {
         return try {
             val options = CompiledModel.Options(accelerator)
@@ -205,6 +207,8 @@ class DeepfakeDetector(private val context: Context) {
         return "None"
     }
 
+    // Single-frame image analysis. Trust score = 0.7*visual + 0.3*metadata safety.
+    // Watermark detection overrides to 0.1f regardless of visual score.
     suspend fun analyzeImage(uri: Uri, bitmap: Bitmap): DetectionResult = withContext(Dispatchers.Default) {
         val safetyResult = SafetyVerificationEngine.verifyImage(context, uri)
         
@@ -302,6 +306,9 @@ class DeepfakeDetector(private val context: Context) {
         }
     }
 
+    // Per-frame video/camera analysis. V1+V2 ensemble if both models loaded, else V1 only.
+    // Temporal engine applies a -0.4f penalty when score variance > 0.03 (flicker detection).
+    // Final score is a 5-frame rolling average for stability.
     suspend fun analyzeFrame(
         frame: Bitmap, 
         faceInfo: FaceInfo,
@@ -359,6 +366,8 @@ class DeepfakeDetector(private val context: Context) {
         currentSamplingRate = if (score > 0.9f) 200L else if (score < 0.8f) 50L else 100L
     }
 
+    // Rule-based forensic report built from individual signal scores.
+    // Used as the reasoning text when no Gemma/VLM engine is loaded.
     private fun generateAIExplanation(
         liveness: Float,
         metadata: Float,
@@ -391,6 +400,10 @@ class DeepfakeDetector(private val context: Context) {
         else "Reasoning: " + reasons.joinToString(" ")
     }
 
+    // Runs TFLite inference and returns a trust score in [0, 1].
+    // Model label convention (dima806/deepfake_vs_real_image_detection config.json):
+    //   index 0 = Real, index 1 = Fake — softmax applied over both logits.
+    // Returns 0.8f stub when the model failed to load.
     private fun runInference(
         m: CompiledModel?, 
         inputs: List<TensorBuffer>?, 

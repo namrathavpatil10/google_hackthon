@@ -14,7 +14,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.FileUpload
-import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -29,17 +28,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-private val Purple  = Color(0xFF7C6FFF)
-private val Dark1   = Color(0xFF0A0A1A)
-private val Dark2   = Color(0xFF13132A)
-private val Dark3   = Color(0xFF1A1A3A)
+private val Purple = Color(0xFF7C6FFF)
+private val Dark1  = Color(0xFF0A0A1A)
+private val Dark2  = Color(0xFF13132A)
+private val Dark3  = Color(0xFF1A1A3A)
 
 @Composable
 fun HomeScreen(
     onMediaSelected: (Uri) -> Unit,
-    onLiveCamera: () -> Unit,
-    onToggleBackgroundProtection: (Boolean) -> Unit,
-    isBackgroundProtectionActive: Boolean = false,
     downloadProgress: Int? = null,
 ) {
     val mediaPicker = rememberLauncherForActivityResult(
@@ -59,8 +55,8 @@ fun HomeScreen(
                 .padding(horizontal = 28.dp),
         ) {
             Spacer(Modifier.height(64.dp))
-            
-            // ... (Logo and Title text remains same)
+
+            // App shield logo
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
@@ -85,7 +81,7 @@ fun HomeScreen(
 
             Spacer(Modifier.height(48.dp))
 
-            // Download Progress (New)
+            // Gemma AI model download progress banner (shown while model is downloading)
             if (downloadProgress != null) {
                 Column(
                     modifier = Modifier
@@ -112,7 +108,7 @@ fun HomeScreen(
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Downloading 2.8GB model for smart analysis...",
+                        "Downloading Gemma 4 2B model (~2GB) for AI reasoning...",
                         fontSize = 11.sp,
                         color = Color.White.copy(alpha = 0.4f)
                     )
@@ -130,7 +126,7 @@ fun HomeScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            // Mode 1: Media Upload (Image or Video)
+            // Active: upload images or videos for deepfake analysis
             ModeCard(
                 icon = Icons.Filled.FileUpload,
                 title = "Upload Image/Video",
@@ -141,32 +137,25 @@ fun HomeScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            // Mode 2: Video Call / Live Camera
-            ModeCard(
+            // Coming soon: real-time video call liveness analysis
+            ComingSoonCard(
                 icon = Icons.Filled.CameraAlt,
                 title = "Video Call Protection",
-                subtitle = "Real-time liveness check: Analyzes blinking and natural lip movements.",
-                gradient = Brush.linearGradient(listOf(Color(0xFF0D3B5E), Color(0xFF0277BD))),
-                onClick = onLiveCamera,
+                subtitle = "Real-time liveness check during Zoom, Meet & WhatsApp calls.",
             )
 
             Spacer(Modifier.height(14.dp))
 
-            // Mode 3: NEW Background Protection
-            ModeCard(
+            // Coming soon: silent background scanning while using other apps
+            ComingSoonCard(
                 icon = Icons.Filled.Shield,
                 title = "Background Protection",
-                subtitle = "Run SentinEdge in the background while using Zoom or WhatsApp.",
-                gradient = if (isBackgroundProtectionActive) 
-                    Brush.linearGradient(listOf(Color(0xFF1B5E20), Color(0xFF4CAF50))) 
-                    else Brush.linearGradient(listOf(Color(0xFF424242), Color(0xFF212121))),
-                onClick = { onToggleBackgroundProtection(!isBackgroundProtectionActive) },
-                badge = if (isBackgroundProtectionActive) "ACTIVE" else "START"
+                subtitle = "Run SentinEdge silently in the background while using other apps.",
             )
 
             Spacer(Modifier.height(36.dp))
 
-            // Footer badges
+            // Capability footer badges
             Row(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 modifier = Modifier.padding(bottom = 36.dp),
@@ -179,6 +168,7 @@ fun HomeScreen(
     }
 }
 
+// Active tappable mode card with gradient background
 @Composable
 private fun ModeCard(
     icon: ImageVector,
@@ -186,7 +176,6 @@ private fun ModeCard(
     subtitle: String,
     gradient: Brush,
     onClick: () -> Unit,
-    badge: String? = null,
 ) {
     Box(
         modifier = Modifier
@@ -207,22 +196,55 @@ private fun ModeCard(
                 Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(24.dp))
             }
             Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Spacer(Modifier.height(4.dp))
+                Text(subtitle, fontSize = 12.sp, color = Color.White.copy(alpha = 0.75f), lineHeight = 17.sp)
+            }
+        }
+    }
+}
+
+// Dimmed non-interactive card for features not yet implemented
+@Composable
+private fun ComingSoonCard(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(20.dp))
+            .background(Color.White.copy(alpha = 0.04f))
+            .border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(20.dp))
+            .padding(22.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .size(50.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.06f)),
+            ) {
+                Icon(icon, contentDescription = null, tint = Color.White.copy(alpha = 0.3f), modifier = Modifier.size(24.dp))
+            }
+            Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    if (badge != null) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50.dp))
-                                .background(Color.White.copy(alpha = 0.2f))
-                                .padding(horizontal = 7.dp, vertical = 2.dp),
-                        ) {
-                            Text(badge, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, letterSpacing = 1.sp)
-                        }
+                    Text(title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.35f))
+                    // Purple "SOON" pill badge
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50.dp))
+                            .background(Purple.copy(alpha = 0.18f))
+                            .padding(horizontal = 7.dp, vertical = 2.dp),
+                    ) {
+                        Text("SOON", fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, color = Purple, letterSpacing = 1.sp)
                     }
                 }
                 Spacer(Modifier.height(4.dp))
-                Text(subtitle, fontSize = 12.sp, color = Color.White.copy(alpha = 0.75f), lineHeight = 17.sp)
+                Text(subtitle, fontSize = 12.sp, color = Color.White.copy(alpha = 0.3f), lineHeight = 17.sp)
             }
         }
     }

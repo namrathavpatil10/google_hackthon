@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
 
                 when (val s = state) {
                     is AnalysisState.Idle -> HomeScreen(
-                        onMediaSelected = { uri -> 
+                        onMediaSelected = { uri ->
                             val mimeType = contentResolver.getType(uri)
                             if (mimeType?.startsWith("video") == true) {
                                 viewModel.analyzeVideo(uri)
@@ -83,12 +83,7 @@ class MainActivity : ComponentActivity() {
                                 viewModel.analyzeImage(uri)
                             }
                         },
-                        onLiveCamera = {
-                            cameraSource = viewModel.startLiveCamera()
-                        },
-                        onToggleBackgroundProtection = { toggleBackgroundProtection(it) },
-                        isBackgroundProtectionActive = isBackgroundServiceRunning,
-                        downloadProgress = downloadProgress
+                        downloadProgress = downloadProgress,
                     )
 
                     is AnalysisState.Loading -> {

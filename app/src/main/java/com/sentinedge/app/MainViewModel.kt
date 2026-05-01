@@ -63,6 +63,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _downloadProgress = MutableStateFlow<Int?>(null)
     val downloadProgress: StateFlow<Int?> = _downloadProgress.asStateFlow()
 
+    // --- Initialisation: auto-download Gemma if not present ---
+    // Kicks off a DownloadManager job on first launch; polls progress every second.
+    // When complete, re-inits the detector so Gemma is picked up without restart.
     init {
         if (!modelDownloader.isModelAvailable()) {
             val id = modelDownloader.startDownload()
@@ -71,7 +74,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     modelDownloader.getDownloadProgress(id).collect { progress ->
                         _downloadProgress.value = progress
                         if (progress == 100) {
-                            detector.init() // Re-init to pick up Gemma
+                            detector.init()
                             _downloadProgress.value = null
                         }
                     }
@@ -83,9 +86,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private var activeSource: FrameSource? = null
     private var analysisJob: Job? = null
 
-    /**
-     * Optimized logic for static image analysis with OOM protection and artificial delay for UX.
-     */
+    // --- Image analysis ---
+    // Downsamples the bitmap to ~1000px to avoid OOM, then runs single-frame detection.
     fun analyzeImage(uri: Uri) {
         stopAnalysis()
         detector.clearBuffer()
@@ -148,6 +150,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // --- Video / camera analysis ---
+    // Both paths funnel into startAnalysis(); DebugFileSource extracts frames from a file,
+    // LiveCameraSource streams frames from CameraX.
     fun analyzeVideo(uri: Uri) {
         stopAnalysis()
         startAnalysis(DebugFileSource(getApplication(), uri), SourceType.VIDEO)
@@ -219,6 +224,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // --- Stop ---
+    // Cancels the coroutine (CancellationException is re-thrown so it doesn't surface as an error),
+    // releases the frame source, and resets UI state to Idle.
     fun stopAnalysis() {
         analysisJob?.cancel()
         activeSource?.release()
