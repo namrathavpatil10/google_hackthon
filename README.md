@@ -23,7 +23,8 @@ Vaishnavi Srinath: vaishnavipdx.@gmail.com
 ## Screenshots
 
 ### Model Download (first launch)
-![Model downloading on first launch](docs/screenshots/model_download.png)
+<img width="738" height="1600" alt="landing_page" src="https://github.com/user-attachments/assets/b6eb6be5-018c-4daa-a316-c1ff8ad820b6" />
+
 > *App downloads the Gemma 4 2B LiteRT-LM model (~2 GB) on first launch with a progress bar. After that it runs fully offline.*
 
 ### Video / Image Analysis
