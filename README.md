@@ -296,3 +296,34 @@ app/src/main/java/com/sentinedge/app/
 ├── MainActivity.kt
 └── MainViewModel.kt
 ```
+
+## References Used:
+
+1. AI Reasoning Engine (LLM)
+
+Google AI Edge: Gemma on LiteRT: https://ai.google.dev/edge/litert-lm/overview
+
+Hugging Face (Gemma-2b-it-TFLite): [google/gemma-2b-it-tflite](https://ai.google.dev/edge/litert-lm/overview)
+
+2. Primary Deepfake Detectors (Vision)
+Hugging Face (dima806 Ensemble): [dima806/deepfake_vs_real_image_detection](https://ai.google.dev/edge/litert-lm/overview)
+
+3. Facial Landmark & Jitter Tracking
+Research Paper (HRNet): Deep High-Resolution Representation Learning for Visual Recognition
+
+Qualcomm AI Hub Optimization: [HRNetFace on Snapdragon 8 Elite](https://aihub.qualcomm.com/models/hrnet_face)
+
+4. Face Detection & Liveness
+Google ML Kit Face Detection Guide: ML Kit: [Face Detection for Android](https://aihub.qualcomm.com/models/hrnet_face)
+
+5. Deployment & Hardware Acceleration
+LiteRT (Formerly TensorFlow Lite) Documentation: LiteRT Core Runtime
+
+LiteRT-LM (LLM Inference API): LLM Inference Guide
+
+Qualcomm AI Hub: Snapdragon 8 Elite Model Catalog
+
+6. Forensic Standards (Watermarks & Signatures)
+C2PA (Content Authenticity Initiative) Official Site: c2pa.org
+
+IPTC Metadata Standard: IPTC Photo Metadata Standard
