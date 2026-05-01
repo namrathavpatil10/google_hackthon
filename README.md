@@ -23,15 +23,15 @@ Vaishnavi Srinath: vaishnavipdx.@gmail.com
 ## Screenshots
 
 ### Model Download (first launch)
-<img width="738" height="1600" alt="landing_page" src="https://github.com/user-attachments/assets/b6eb6be5-018c-4daa-a316-c1ff8ad820b6" />
+<img width="300" alt="landing_page" src="https://github.com/user-attachments/assets/b6eb6be5-018c-4daa-a316-c1ff8ad820b6" />
 
 > *App downloads the Gemma 4 2B LiteRT-LM model (~2 GB) on first launch with a progress bar. After that it runs fully offline.*
 
 ### Video Analysis
-<img width="738" height="1600" alt="WhatsApp Image 2026-05-01 at 12 34 59 PM" src="https://github.com/user-attachments/assets/8e5ec01d-444d-4cca-98b1-4a7df31d857a" />
+<img width="300" alt="WhatsApp Image 2026-05-01 at 12 34 59 PM" src="https://github.com/user-attachments/assets/8e5ec01d-444d-4cca-98b1-4a7df31d857a" />
 
 ### Image Analysis
-<img width="738" height="1600" alt="WhatsApp Image 2026-05-01 at 12 26 27 PM (1)" src="https://github.com/user-attachments/assets/43ed524b-37bb-437c-9946-67bfa013a1aa" />
+<img width="300" alt="WhatsApp Image 2026-05-01 at 12 26 27 PM (1)" src="https://github.com/user-attachments/assets/43ed524b-37bb-437c-9946-67bfa013a1aa" />
 
 > *Upload any image or video clip — SentinEdge runs the dual-model ensemble and forensic pre-scan, then shows a trust score, watermark flags, and a Gemma-generated explanation.*
 
