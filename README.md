@@ -1,6 +1,22 @@
 # SentinEdge
 
-Real-time deepfake detection on Android. Upload a photo or video, scan a live camera feed, or run a background shield over your video calls — SentinEdge tells you if the face is AI-generated, entirely on-device.
+# Application Description
+
+It’s 2 AM. Your phone rings a video call from someone in a bank uniform, calm and authoritative. They say your account has been compromised and need your OTP to freeze it. The face looks real. The voice sounds real. You almost type the code.
+But Sentin-Edge has already flagged it. Three seconds into the call, a red overlay appears: “Deepfake Detected” Irregular facial muscle movement and unnatural eye blinking pattern identified.” You hang up. Your money is safe.
+This is the crisis Sentin-Edge was built for.
+Sentin-Edge is a real-time deepfake defense app for the Samsung Galaxy S25 Ultra. Using a pre-trained Vision Transformer from Qualcomm AI Hub, it performs forensic analysis through the Snapdragon 8 Elite’s NPU detecting sub-pixel inconsistencies, unnatural blinking, and generative artifacts invisible to the human eye. Results appear instantly as a Trust Score overlay on any live camera feed.
+When a deepfake is flagged, the on-device LiteRT-LM generates a plain-language Forensic Explanation making the threat understandable to everyday users, not just experts. Everything runs fully on-device. No cloud. No data leaving your phone. No privacy tradeoff.
+Sentin-Edge transforms your smartphone from a passive screen into an active, privacy-preserving firewall protecting you at the exact moment you need it most.
+
+# Names and email of all Eligible Individuals on the team:
+
+Fardeen Khan: fard33nrk@gmail.com
+
+Namratha V Patil: nvpatil@usc.edu
+
+Vaishnavi Srinath: vaishnavipdx.@gmail.com
+
 
 ---
 
@@ -23,6 +39,43 @@ Real-time deepfake detection on Android. Upload a photo or video, scan a live ca
 > *Floating badge sits on top of WhatsApp / Zoom / Meet while you talk. Turns red the moment a deepfake is detected.*
 
 ---
+# Project Description 
+
+Sentin-Edge is a cutting-edge security application designed for the Samsung Galaxy S25 Ultra. It transforms the smartphone from a passive viewing device into an active, privacy-preserving firewall against AI-generated fraud. By leveraging the Snapdragon 8 Elite’s NPU, Sentin-Edge detects deepfakes in real-time during live video calls, media playback, or camera feeds—keeping your data and identity safe without ever sending a single frame to the cloud.
+
+Core Features & Functionality
+Sentin-Edge provides the below distinct layers of protection tailored for everyday mobile use:
+•	Media Upload Analysis: Users can upload existing images or videos from their gallery for a comprehensive forensic deep-dive report.
+•	Plain-Language Explanations: Powered by Gemma 4 2B (LiteRT-LM), the app doesn't just give a score; it explains why a video is suspicious (e.g., "Unnatural blinking patterns detected") in simple terms.
+
+
+How the Technology Works
+
+Sentin-Edge employs a multi-stage Forensic Pipeline to ensure maximum accuracy and zero latency:
+1. Forensic Pre-Scan
+Before the AI even looks at the pixels, the SafetyVerificationEngine scans for digital fingerprints. It looks for watermarks initially and if there exists any watermarks it directly classifies as suscpicious.
+2. Real-Time ML Analysis (The Brain)
+Using the LiteRT (formerly TFLite) runtime optimized for the Qualcomm Hexagon NPU:
+•	Vision Transformers (ViT): An ensemble of pre-trained models (dima806) analyzes facial textures for sub-pixel inconsistencies and generative artifacts.
+•	Biometric Tracking: ML Kit and HRNet track "liveness" signals, such as blink rates per minute and mouth movement synchronicity.
+•	Temporal Engine: A 20-frame rolling window monitors for "glitches" or landmark jitter that occur when a deepfake mask fails to align with the underlying face.
+3. The Signal Combiner
+All signals (visual score, biometric data, and metadata) are fused into a final Trust Score:
+•	Green (≥ 0.8): Real/Trustworthy.
+•	Orange (0.5 – 0.7): Suspicious/Inconclusive.
+•	Red (< 0.5): Deepfake Detected.
+
+
+Technical Stack & Architecture
+
+Built for the next generation of Android hardware, Sentin-Edge utilizes a high-performance stack:
+•	Hardware Acceleration: Primary execution on the Snapdragon 8 Elite NPU, with intelligent fallback to Adreno GPU or XNNPACK CPU.
+•	Frameworks: Kotlin and Jetpack Compose for a modern, fluid UI; CameraX for high-speed frame capture.
+•	On-Device LLM: Uses LiteRT-LM to run Gemma 4 2B locally, ensuring that the "Forensic Explanation" feature remains 100% private.
+•	Privacy First: No cloud processing. All analysis happens locally on the device, ensuring biometric data never leaves the user's phone.
+
+Real-time deepfake detection on Android. Upload a photo or video, scan a live camera feed, or run a background shield over your video calls — SentinEdge tells you if the face is AI-generated, entirely on-device.
+
 
 ## What it does
 
@@ -201,7 +254,7 @@ com.google.ai.edge.litertlm:litertlm-android     LiteRT-LM for Gemma 4 2B
 
 ---
 
-## Running the app
+## Setting and Running the app
 
 1. Clone the repo
 2. Open in Android Studio (Ladybug or newer)
